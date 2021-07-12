@@ -52,24 +52,17 @@
 
 ## About
 
-[comment]: <> (<table><tr><td>)
-
-[comment]: <> (> TODO)
-
+Multi Arm Bandit based AB Experimentation and Feature Rollout optimisation framework.
 
 <br/>
 <details>
 <summary>Screenshots</summary>
-
-[comment]: <> (> TODO)
 
 |                               Home Page                               |                               Login Page                               |
 | :-------------------------------------------------------------------: | :--------------------------------------------------------------------: |
 | <img src="docs/images/screenshot.png" title="Home Page" width="100%"> | <img src="docs/images/screenshot.png" title="Login Page" width="100%"> |
 
 </details>
-
-[comment]: <> (</td></tr></table>)
 
 ### Built With
 
