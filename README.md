@@ -52,15 +52,16 @@
 
 ## About
 
-<table><tr><td>
+[comment]: <> (<table><tr><td>)
 
-> TODO
+[comment]: <> (> TODO)
 
+
+<br/>
 <details>
 <summary>Screenshots</summary>
-<br>
 
-> TODO
+[comment]: <> (> TODO)
 
 |                               Home Page                               |                               Login Page                               |
 | :-------------------------------------------------------------------: | :--------------------------------------------------------------------: |
@@ -68,28 +69,111 @@
 
 </details>
 
-</td></tr></table>
+[comment]: <> (</td></tr></table>)
 
 ### Built With
 
-> **[?]**
-> Please provide the technologies that are used in the project.
+- Service -- Rust v1.53.0
+- Admin UI -- streamlit
 
 ## Getting Started
 
 ### Prerequisites
 
-> TODO
+- Rust v1.53.0
 
 ### Installation
+
+#### Service
+```shell
+cd service
+cargo build
+./target/debug/ab-optimisation-framework start --config_dir=config --env=dev
+```
+
+#### Admin UI
 
 > TODO
 
 ## Usage
 
+### APIs
+
+#### /api/run-experiment
+
+Finds all the active experiments for a given project, user, and custom context.
+
+Method = `POST`
+
+Request =
+```json
+{
+  "app_id": "id of the app",
+  "project_id": "id of the project",
+  "user_id": "string user id",
+  "ctx": "custom json object"
+}
+```
+
+Response =
+```json
+{
+  "data": {
+    "project_id": "id of the project",
+    "active_experiments": [
+      {
+        "experiment": "name of the experiment",
+        "kind": "experiment",
+        "variation": "variation if any"
+      },
+      {
+        "experiment": "name of the experiment",
+        "kind": "feature"
+      }
+    ]
+  },
+  "time_taken": "human readable time taken by server"
+}
+```
+
+#### other admin APIs
+
 > TODO
+ 
+#### /oor
+
+Inverts the OOR status of the service and returns new status
+
+Method = `GET`
+
+Response = `one of the string: OK, NOK`
+
+#### /status
+
+Returns the rotation status of the service
+
+Method = `GET`
+
+Response = `one of the string: OK, NOK`
+
+## Design Details
+
+- AB Experimentation configurations are defined for an App, known by a name.
+- Each app has one or more projects, known by a name.
+- Each project has one or many experiments, each having a name, target audience, and experiment size. Target audience can be defined as an expression on cookie, header, or custom context.
+- Each experiment has one or many variations, each having variation size and a stored configuration that can be used for configuring test behaviour in the application.
+- Feature is a specific type of experiment with no variations.
+- Each project can have one or many experiment groups, which defines a mutual exclusion policy between experiments, and priority of experiments. An experiment can be part of only one experiment group.
+- Target audiences can also be a predefined list of users for the environment - such as beta.
+
 
 ## Roadmap
+
+- SDKs for 
+  - Java Server
+  - iOS App
+  - Android App
+  - Web App
 
 See the [open issues](https://github.com/snow01/ab-optimisation-framework/issues) for a list of proposed features (and
 known issues).

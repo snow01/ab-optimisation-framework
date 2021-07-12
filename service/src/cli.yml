@@ -1,0 +1,49 @@
+name: ab_optimisation_service
+version: "1.0.0"
+author: Shailendra Sharma <shailendra.sharma@verse.in>
+about: AB Optimisation Service
+settings:
+  - SubcommandRequiredElseHelp
+  - ColoredHelp
+  - GlobalVersion
+  - VersionlessSubcommands
+args:
+  - config_dir:
+      long: config_dir
+      value_name: FILE
+      help: custom config file (optional)
+      global: true
+      takes_value: true
+  - env:
+      long: env
+      value_name: NAME
+      help: deployment environment value (optional)
+      global: true
+      takes_value: true
+  - postgres:
+      long: postgres
+      value_name: HOST:PORT
+      help: etcd addresses (host:port)
+      default_value: "postgresql://postgres:postgres@127.0.0.1:5432/obelix_metadata"
+      global: true
+      takes_value: true
+  - log4rs_prop_file:
+      long: log4rs_prop_file
+      value_name: NAME
+      help: log4rs property yaml file
+      default_value: "config/log4rs_rolling_file.yml"
+      global: true
+      takes_value: true
+subcommands:
+  - start:
+      about: Starts service
+      settings:
+        - ArgRequiredElseHelp
+        - ColoredHelp
+      args:
+        - addr:
+            long: addr
+            value_name: HOST:PORT
+            help: Node's address (host:port)
+            default_value: "127.0.0.1:6464"
+            takes_value: true

@@ -1,8 +1,44 @@
 [package]
 name = "ab-optimisation-framework"
 version = "0.1.0"
+authors = ["Shailendra Sharma <shailendra.sharma@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+jemallocator = "0.3.2"
+anyhow = "1.0.42"
+serde = { version = "1.0.126", features = ['derive', 'rc'] }
+serde_json = "1.0.64"
+log = "0.4.14"
+futures = { version = "0.3.15", features = ['default'] }
+lazy_static = "1.4.0"
+uuid = { version = "0.8.2", features = ["v4", "serde"] }
+rand = "0.8.4"
+config = "0.11.0"
+base64 = "0.13.0"
+clap = { version = "2.33.3", features = ["yaml"] }
+log4rs = "1.0.0"
+hyper = { version = "0.14.10", features = ["full"] }
+tokio = { version = "1.8.1", features = ["full"] }
+itertools = "0.10.1"
+diesel = { version = "1.4.7", features = ["extras", "postgres", "uuidv07"] }
+enumset = "1.0.7"
+gethostname = "0.2.1"
+derive_more = "0.99.16"
+parking_lot = "0.11.1"
+http = "0.2.4"
+objekt-clonable = "0.2.2"
+libc = "0.2.98"
+chrono = "0.4.19"
+bytes = "1.0.1"
+async-compression = { version = "0.3.8", features = ["brotli", "deflate", "gzip", "tokio", "futures-io"] }
+prometheus = "0.12.0"
+crossbeam-epoch = "0.9.5"
+metered = "0.8.0"
+twoway = "0.2.2"
+crossbeam = "0.8.1"
+tokio-util = { version = "0.6.7", features = ["io"] }
+async-trait = "0.1.50"
+humantime-serde = "1.0.1"

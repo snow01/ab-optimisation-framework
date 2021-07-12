@@ -1,0 +1,111 @@
+#refresh_rate: 30 seconds
+appenders:
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{h({d})} {h({l})} {h({f}:{L})} {t} - {m}{n}"
+  file:
+    kind: rolling_file
+    path: "logs/service.log"
+    encoder:
+      pattern: "{d} {l} {f}:{L} {t} - {m}{n}"
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 1gb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 10
+        pattern: "logs/service-{}.log"
+  access_log:
+    kind: rolling_file
+    path: "logs/access.log"
+    encoder:
+      pattern: "{d} {l} {f}:{L} {t} - {m}{n}"
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 1gb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 10
+        pattern: "logs/access-{}.log"
+  warmup_log:
+    kind: rolling_file
+    path: "logs/warmup.log"
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 1gb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 10
+        pattern: "logs/warmup-{}.log"
+
+root:
+  level: debug
+  appenders:
+    - file
+    - stdout
+#loggers:
+#  etcd::client:
+#    level: off
+#  obelix_core::shard:
+#    level: off
+#  obelix_core::shard::table_db:
+#    level: error
+#  obelix_core::shard::table_db::data_crud:
+#    level: info
+#  obelix_core::shard::actors:
+#    level: info
+#  obelix_core::shard::job_executor:
+#    level: info
+#  obelix_core::shard::job_manager:
+#    level: info
+#  obelix_core::node::job_manager:
+#    level: info
+#  obelix_core::common_jobs:
+#    level: off
+#  app::backend::db:
+#    level: off
+#  app::requests:
+#    level: off
+#  notification_engine::batcher:
+#    level: error
+#  notification-engine::job::job_execute_handler:
+#    level: info
+#  notification_engine::job::job_handler:
+#    level: off
+#  notification-engine::dispatcher::service:
+#    level: info
+#  obelix_core::search::commons:
+#    level: error
+#  actix_web:
+#    level: error
+#    appenders:
+#      - access_log
+#    additive: false
+#  job_manager::job_manager:
+#    level: error
+#  notification_engine::dispatcher::status_processor:
+#    level: error
+#  notification_engine::dispatcher::service:
+#    level: info
+#  notification_engine::dispatcher::msg_sender::ios_sender:
+#    level: info
+#  slow_query_log:
+#    level: info
+#    appenders:
+#      - slow_query_log
+#    additive: false
+#  warmup_log:
+#    level: info
+#    appenders:
+#      - warmup_log
+#    additive: false
