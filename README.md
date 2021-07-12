@@ -117,11 +117,13 @@ Response =
       {
         "experiment": "name of the experiment",
         "kind": "experiment",
-        "variation": "variation if any"
+        "variation": "variation, if any",
+        "data": "stored json object, if any, that caller can use to configure its logic"
       },
       {
         "experiment": "name of the experiment",
-        "kind": "feature"
+        "kind": "feature",
+        "data": "stored json object, if any, that caller can use to configure its logic"
       }
     ]
   },
