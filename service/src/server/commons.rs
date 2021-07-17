@@ -1,6 +1,7 @@
+use std::iter::repeat;
+
 use http::HeaderValue;
 use libc::{c_char, c_int, size_t};
-use std::iter::repeat;
 
 lazy_static! {
     pub static ref HOSTNAME: String = hostname();

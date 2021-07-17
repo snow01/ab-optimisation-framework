@@ -3,59 +3,54 @@
 #![allow(dead_code)]
 #![recursion_limit = "8192"]
 
-mod config;
-mod server;
-mod api;
-mod application;
-mod core;
-
+#[macro_use]
+extern crate clap;
+// #[macro_use]
+pub extern crate derive_more;
+// #[macro_use]
+extern crate diesel;
+#[macro_use]
+extern crate enumset;
+extern crate gethostname;
+// #[macro_use]
+extern crate itertools;
 extern crate jemallocator;
+#[macro_use]
+pub extern crate lazy_static;
+#[macro_use]
+extern crate pest_derive;
+// #[macro_use]
+pub extern crate serde_json;
+
+use std::path::Path;
+
+use anyhow::Context;
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
+use log4rs;
+
+// crate specific imports
+use crate::config::load_global_config;
+use crate::server::{start_http_server, ServiceBuilder};
+use crate::service::{AbOptimisationService, AbOptimisationServiceBuilder};
+
+mod api;
+mod config;
+mod core;
+mod server;
+mod service;
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#[macro_use]
-extern crate clap;
-
-#[macro_use]
-extern crate enumset;
-
-#[macro_use]
-pub extern crate lazy_static;
-
-#[macro_use]
-pub extern crate derive_more;
-
-#[macro_use]
-pub extern crate serde_json;
-
-#[macro_use]
-extern crate itertools;
-
-extern crate gethostname;
-
-#[macro_use]
-extern crate diesel;
-
-#[allow(unused_imports)]
-use log::{debug, error, info, warn};
-use std::path::Path;
-use log4rs;
-use anyhow::Context;
-
-// crate specific imports
-use crate::config::load_global_config;
-use crate::server::{start_http_server, ApplicationBuilder};
-use crate::application::{AbOptimisationApplicationBuilder, AbOptimisationApplication};
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), anyhow::Error> {
-    run_main(AbOptimisationApplicationBuilder {}).await
+    run_main(AbOptimisationServiceBuilder {}).await
 }
 
 pub async fn run_main<AppBuilder>(app_builder: AppBuilder) -> anyhow::Result<()>
-    where
-        AppBuilder: 'static + ApplicationBuilder<AbOptimisationApplication>
+where
+    AppBuilder: 'static + ServiceBuilder<AbOptimisationService>,
 {
     // build command line
     let yaml = load_yaml!("cli.yml");
@@ -68,7 +63,9 @@ pub async fn run_main<AppBuilder>(app_builder: AppBuilder) -> anyhow::Result<()>
     let env: &str = &value_t!(matches, "env", String).unwrap();
 
     // setup logging
-    log4rs::init_file(Path::new(log4rs_prop_file), Default::default()).with_context(|| format!("Error in opening log file: {}", log4rs_prop_file)).unwrap();
+    log4rs::init_file(Path::new(log4rs_prop_file), Default::default())
+        .with_context(|| format!("Error in opening log file: {}", log4rs_prop_file))
+        .unwrap();
 
     load_global_config(config_dir, env)?;
 

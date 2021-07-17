@@ -1,0 +1,11 @@
+other_chars = { "." | "." | "_" }
+
+ident = { (ASCII_ALPHANUMERIC | other_chars)+ }
+
+short_name = @{ ident }
+version = @{ (ASCII_DIGIT)+ }
+member_kind = @{ "C" | "T" }
+variation = @{ ident | "" }
+
+experiment = { short_name ~ "," ~ version ~ "," ~ member_kind ~ "," ~ variation }
+cookie = { experiment ~ (";" ~ experiment)* }

@@ -19,7 +19,7 @@ root:
   appenders:
     - stdout
     - file
-#loggers:
+loggers:
 #  obelix_core::replication::write_batch:
 #    level: off
 #  notification_engine::batcher::notif_batcher:
@@ -57,13 +57,13 @@ root:
 #    additive: false
 #  bit_page_vec_log:
 #    level: info
-#  access_log:
-#    level: info
-#    appenders:
-#      - access_log
-#    additive: false
-#  metrics_log:
-#    level: debug
-#    appenders:
-#      - access_log
-#    additive: false
+  access_log:
+    level: info
+    appenders:
+      - access_log
+    additive: false
+  metrics_log:
+    level: debug
+    appenders:
+      - access_log
+    additive: false

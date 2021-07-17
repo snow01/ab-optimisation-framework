@@ -31,7 +31,7 @@ args:
       long: log4rs_prop_file
       value_name: NAME
       help: log4rs property yaml file
-      default_value: "config/log4rs_rolling_file.yml"
+      default_value: "config/log4rs.yml"
       global: true
       takes_value: true
 subcommands:

@@ -1,18 +1,27 @@
-mod experiment_runner;
-
-use crate::server::{Application, HttpRoute, HttpResponse};
-use hyper::Body;
-use http::Response;
 use async_trait::async_trait;
-use crate::application::AbOptimisationApplication;
+use http::Response;
+use hyper::Body;
+
+use crate::server::{HttpResponse, HttpRoute, Service};
+use crate::service::AbOptimisationService;
+
+mod common;
+mod experiment_runner;
+mod experiment_tracking_data;
 
 #[async_trait]
-impl Application for AbOptimisationApplication {
-    async fn api_handler<'a>(&self, body: Body, route: &mut HttpRoute<'a>, path: &[&str]) -> anyhow::Result<Response<Body>>
-    {
+impl Service for AbOptimisationService {
+    async fn api_handler<'a>(
+        &self,
+        body: Body,
+        route: &HttpRoute<'a>,
+        path: &[&str],
+    ) -> anyhow::Result<Response<Body>> {
         match path {
             // sub routes
-            ["run"] if matches!(route.method, &http::Method::POST) => experiment_runner::run(self, route, body).await,
+            ["run"] if matches!(route.method, &http::Method::POST) => {
+                experiment_runner::run(self, route, body).await
+            }
 
             // ["schema", rest @ ..] => HttpResponse::not_found(),
             //
@@ -25,8 +34,7 @@ impl Application for AbOptimisationApplication {
             // ["search", rest @ ..] if matches!(route.method, &Method::POST) => search_handler(&mut route, body, rest, app).await,
             //
             // ["job-manager", rest @ ..] => HttpResponse::not_found(),
-
-            _ => HttpResponse::not_found(),
+            _ => HttpResponse::not_found(route.path),
         }
     }
 }
