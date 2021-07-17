@@ -203,6 +203,7 @@ cargo build --release
 >       - `name`: descriptive name of the variation
 >       - `short_name`: short name that is used in tracking cookie and instrumentation. Should be kept to max 3 characters.
 >       - `size`: variation size can be defined only in percent terms, and all variation size should add upto exactly 100.
+>       - `data`: optional data that is sent back to client for the active experiment and selected variant. Variant data is deep merged with experiment data, where variant data takes priority for same keys.
 > - `audience_lists`:
 >   - `id`: identifier of the audience list
 >   - `name`: descriptive name of the audience list, eg beta users
