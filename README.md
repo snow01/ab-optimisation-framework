@@ -101,37 +101,167 @@ Method = `POST`
 Request =
 ```json
 {
-  "app_id": "id of the app",
-  "project_id": "id of the project",
-  "user_id": "string user id",
-  "ctx": "custom json object"
+  "app_id": "app1",
+  "project_id": "android",
+  "user_id": "123",
+  "context": {
+    "app_version": "4.7.1004",
+    "new_user": true
+  }
 }
 ```
 
 Response =
 ```json
 {
-  "data": {
-    "project_id": "id of the project",
-    "active_experiments": [
-      {
-        "experiment": "name of the experiment",
-        "kind": "experiment",
-        "variation": "variation, if any",
-        "data": "stored json object, if any, that caller can use to configure its logic"
-      },
-      {
-        "experiment": "name of the experiment",
-        "kind": "feature",
-        "data": "stored json object, if any, that caller can use to configure its logic"
+  "app_id": "app1",
+  "project_id": "android",
+  "tracking_cookie_name": "X-abof-j-a",
+  "active_experiments": [
+    {
+      "short_name": "onb",
+      "variation": "2",
+      "data": {
+        "a": 2,
+        "b": "b2",
+        "c": "c2",
+        "d": 0,
+        "e": [
+          "e0",
+          "e1",
+          "e2",
+          "e20",
+          "e21",
+          "e22"
+        ],
+        "f": {
+          "f1": "f1",
+          "f12": "f12"
+        }
       }
-    ]
-  },
-  "time_taken": "human readable time taken by server"
+    }
+  ]
 }
 ```
 
+Tracking Cookie: ```X-abof-j-a=onb,0,T,2; HttpOnly; Path=/; Max-Age=630720000; Expires=Fri, 12 Jul 2041 16:32:42 GMT```
+
+Note: Clients shall read and use tracking cookie value for event instrumentations.
+
 #### other admin APIs
+
+```json
+{
+  "id": "app1",
+  "name": "josh",
+  "short_name": "j"
+}
+```
+
+```json
+{
+  "id": "android",
+  "name": "android",
+  "short_name": "a",
+  "app": "app1",
+  "experiments": [
+    {
+      "id": "onboarding",
+      "name": "onboarding",
+      "short_name": "onb",
+      "version": 0,
+      "kind": "Experiment",
+      "audiences": [
+        {
+          "name": "new_users",
+          "size_kind": "Percent",
+          "size_value": 20,
+          "audience_kind": "Script",
+          "script_src": "ctx['new_user'] == True and ctx['app_version'] >= '4.7.3'"
+        },
+        {
+          "name": "beta_users",
+          "size_kind": "Absolute",
+          "size_value": 2,
+          "audience_kind": "List",
+          "list_id": "beta_users"
+        }
+      ],
+      "variations": [
+        {
+          "id": "variation1",
+          "name": "variation 1",
+          "short_name": "1",
+          "size": 20,
+          "data": {
+            "a": 1,
+            "b": "b1",
+            "c": "c1",
+            "e": [
+              "e10",
+              "e11",
+              "e12"
+            ],
+            "f": {
+              "f11": "f11"
+            }
+          }
+        },
+        {
+          "id": "variation2",
+          "name": "variation 2",
+          "short_name": "2",
+          "size": 80,
+          "data": {
+            "a": 2,
+            "b": "b2",
+            "c": "c2",
+            "e": [
+              "e20",
+              "e21",
+              "e22"
+            ],
+            "f": {
+              "f12": "f12"
+            }
+          }
+        }
+      ],
+      "data": {
+        "a": 0,
+        "b": "b0",
+        "c": "c0",
+        "d": 0,
+        "e": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "f": {
+          "f1": "f1"
+        }
+      }
+    }
+  ],
+  "audience_lists": [
+    {
+      "id": "beta_users",
+      "name": "beta users",
+      "list": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    }
+  ]
+}
+```
 
 > TODO
  
@@ -155,8 +285,9 @@ Response = `one of the string: OK, NOK`
 
 - AB Experimentation configurations are defined for an App, known by a name.
 - Each app has one or more projects, known by a name.
-- Each project has one or many experiments, each having a name, target audience, and experiment size. Target audience can be defined as an expression on cookie, header, or custom context.
-- Each experiment has one or many variations, each having variation size and a stored configuration that can be used for configuring test behaviour in the application.
+- Each project has one or many experiments, each having a name, target audience, and stored data. Target audience is either an expression on given `context` or reference to predefined `list`.
+- Each target audience has size, specified either as absolute value or percentage.
+- Each experiment has one or many variations, each having variation size and a stored data that can be used for configuring test behaviour in the application.
 - Feature is a specific type of experiment with no variations.
 - Each project can have one or many experiment groups, which defines a mutual exclusion policy between experiments, and priority of experiments. An experiment can be part of only one experiment group.
 - Target audiences can also be a predefined list of users for the environment - such as beta.
