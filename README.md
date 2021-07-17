@@ -194,7 +194,7 @@ cargo build --release
 >   - `version`: version number is automatically incremented on updates to the same experiment.
 >   - `audiences`: experiment is evaluated for audiences, where an audience is defined by
 >       - `name`: descriptive name of the audience
->       - `audience_kind`: audience are of 2 kinds - `List` or `Script`, `List` is reference (`list_id`) to predefined lists, while `Script` is python expression (`script_src`).
+>       - `audience_kind`: audience are of 2 kinds - `List` or `Script`, `List` is reference (`list_id`) to predefined lists, while `Script` is **python expression** (`script_src`).
 >       - `size_kind`: size can be specified in 2 kinds - `Percent` or `Absolute`, both are self explanatory.
 >       - `size_value`: corresponding size value, where percent value can be from 1 to 100
 >   - `data`: optional data that is sent back to client for the active experiment.
@@ -468,6 +468,14 @@ cargo build --release
 * Method = `GET`
 
 * Response = `one of the string: OK, NOK`
+
+## Inline Python Scripts for Audience Condition
+
+- `script_src` condition for `audience` of kind `Script` supports any valid single line [python expression](https://www.w3schools.com/python/python_operators.asp).
+- Run context is available as python dictionary inside `ctx` variable. So, if context was `{"new_user": true, "app_version": "4.7.3"}`, we can access new_user value as `ctx['new_user']` and app_version value as `ctx['app_version']`.
+- All valid python inbuilt functions and operators are supported.
+- String literals shall be quoted with single quotes.
+- For app version comparison, app version can be parsed into semantic version with method `fns.parse_version`, eg `fns.parse_version(ctx['app_version']) > fns.parse_version('4.7.3')` is a valid app version comparison.
 
 ## Design Details
 
