@@ -37,6 +37,14 @@
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
 - [Usage](#usage)
+    - [APIs](#apis)
+      - [Run an experiment](#run-an-experiment)
+      - [Add Or Update an app](#add-or-update-an-app)
+      - [View an app](#view-an-app)
+      - [Add Or Update a project](#add-or-update-a-project)
+      - [View a project](#view-a-project)
+      - [Change rotation status of service](#change-rotation-status-of-service)
+      - [View rotation status of service](#view-rotation-status-of-service)
 - [Roadmap](#roadmap)
 - [Support](#support)
 - [Project assistance](#project-assistance)
@@ -92,13 +100,15 @@ cargo build
 
 ### APIs
 
-#### /api/run-experiment
+#### Run an experiment
 
-Finds all the active experiments for a given project, user, and custom context.
+Finds all the active experiments for a given app, project, user, and context.
 
-Method = `POST`
+* URL = `/api/run`
 
-Request =
+* Method = `POST`
+
+* Request Body =
 ```json
 {
   "app_id": "app1",
@@ -111,7 +121,7 @@ Request =
 }
 ```
 
-Response =
+* Response Body =
 ```json
 {
   "app_id": "app1",
@@ -144,12 +154,17 @@ Response =
 }
 ```
 
-Tracking Cookie: ```X-abof-j-a=onb,0,T,2; HttpOnly; Path=/; Max-Age=630720000; Expires=Fri, 12 Jul 2041 16:32:42 GMT```
+* Tracking Cookie: ```X-abof-j-a=onb,0,T,2; HttpOnly; Path=/; Max-Age=630720000; Expires=Fri, 12 Jul 2041 16:32:42 GMT```
 
 Note: Clients shall read and use tracking cookie value for event instrumentations.
 
-#### other admin APIs
+#### Add or Update an App
 
+* URL = `/api/app`
+
+* Method = `POST`
+
+* Request Body =
 ```json
 {
   "id": "app1",
@@ -158,6 +173,28 @@ Note: Clients shall read and use tracking cookie value for event instrumentation
 }
 ```
 
+### View an App
+
+* URL = `/api/app/<app-id>`
+
+* Method = `GET`
+  
+* Response Body =
+```json
+{
+  "id": "app1",
+  "name": "josh",
+  "short_name": "j"
+}
+```
+
+### Add or Update a Project
+
+* URL = `/api/project`
+
+* Method = `POST`
+  
+* Request Body =
 ```json
 {
   "id": "android",
@@ -263,23 +300,137 @@ Note: Clients shall read and use tracking cookie value for event instrumentation
 }
 ```
 
-> TODO
+#### View a Project
+
+* URL = `/api/project/<app-id>/<project-id>`
+
+* Method = `GET`
+  
+* Response body =
+```json
+{
+  "id": "android",
+  "name": "android",
+  "short_name": "a",
+  "app": "app1",
+  "experiments": [
+    {
+      "id": "onboarding",
+      "name": "onboarding",
+      "short_name": "onb",
+      "version": 0,
+      "kind": "Experiment",
+      "audiences": [
+        {
+          "name": "new_users",
+          "size_kind": "Percent",
+          "size_value": 20,
+          "audience_kind": "Script",
+          "script_src": "ctx['new_user'] == True and ctx['app_version'] >= '4.7.3'"
+        },
+        {
+          "name": "beta_users",
+          "size_kind": "Absolute",
+          "size_value": 2,
+          "audience_kind": "List",
+          "list_id": "beta_users"
+        }
+      ],
+      "variations": [
+        {
+          "id": "variation1",
+          "name": "variation 1",
+          "short_name": "1",
+          "size": 20,
+          "data": {
+            "a": 1,
+            "b": "b1",
+            "c": "c1",
+            "e": [
+              "e10",
+              "e11",
+              "e12"
+            ],
+            "f": {
+              "f11": "f11"
+            }
+          }
+        },
+        {
+          "id": "variation2",
+          "name": "variation 2",
+          "short_name": "2",
+          "size": 80,
+          "data": {
+            "a": 2,
+            "b": "b2",
+            "c": "c2",
+            "e": [
+              "e20",
+              "e21",
+              "e22"
+            ],
+            "f": {
+              "f12": "f12"
+            }
+          }
+        }
+      ],
+      "data": {
+        "a": 0,
+        "b": "b0",
+        "c": "c0",
+        "d": 0,
+        "e": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "f": {
+          "f1": "f1"
+        }
+      }
+    }
+  ],
+  "audience_lists": [
+    {
+      "id": "beta_users",
+      "name": "beta users",
+      "list": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    }
+  ]
+}
+```
  
-#### /oor
+#### Change rotation status of service
 
 Inverts the OOR status of the service and returns new status
 
-Method = `GET`
+* URL = `/oor`
 
-Response = `one of the string: OK, NOK`
+* Method = `GET`
 
-#### /status
+* Response = `one of the string: OK, NOK`
+
+#### View rotation status of service
 
 Returns the rotation status of the service
 
-Method = `GET`
+* URL = `/status`
 
-Response = `one of the string: OK, NOK`
+* Method = `GET`
+
+* Response = `one of the string: OK, NOK`
 
 ## Design Details
 
@@ -360,4 +511,4 @@ See [LICENSE](LICENSE) for more information.
 
 ## Acknowledgements
 
-> TODO
+* Bapu Kota, for his reviews and suggestions.
