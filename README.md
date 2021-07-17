@@ -40,8 +40,8 @@
     - [APIs](#apis)
       - [Run an experiment](#run-an-experiment)
       - [Add Or Update an app](#add-or-update-an-app)
-      - [View an app](#view-an-app)
       - [Add Or Update a project](#add-or-update-a-project)
+      - [View an app](#view-an-app)
       - [View a project](#view-a-project)
       - [Change rotation status of service](#change-rotation-status-of-service)
       - [View rotation status of service](#view-rotation-status-of-service)
@@ -88,8 +88,8 @@ Multi Arm Bandit based AB Experimentation and Feature Rollout optimisation frame
 #### Service
 ```shell
 cd service
-cargo build
-./target/debug/ab-optimisation-framework start --config_dir=config --env=dev
+cargo build --release
+./target/release/ab-optimisation-framework start --config_dir=config --env=dev
 ```
 
 #### Admin UI
@@ -102,7 +102,7 @@ cargo build
 
 #### Run an experiment
 
-Finds all the active experiments for a given app, project, user, and context.
+> Finds all the active experiments for a given `app_id`, `project_id`, `user_id`, and `context`.
 
 * URL = `/api/run`
 
@@ -154,11 +154,17 @@ Finds all the active experiments for a given app, project, user, and context.
 }
 ```
 
-* Tracking Cookie: ```X-abof-j-a=onb,0,T,2; HttpOnly; Path=/; Max-Age=630720000; Expires=Fri, 12 Jul 2041 16:32:42 GMT```
-
-Note: Clients shall read and use tracking cookie value for event instrumentations.
+* Tracking Cookie =
+    - Cookie Value = ```X-abof-j-a=onb,0,T,2; HttpOnly; Path=/; Max-Age=630720000; Expires=Fri, 12 Jul 2041 16:32:42 GMT```
+    - Where, cookie name is `X-abof-<app-short-name>-<project-short-name>`
+    - **Note:** Clients shall read and use tracking cookie value for event instrumentations.
 
 #### Add or Update an App
+
+> Add or update an app metadata by posting app data, where an app is recognised by
+> - `id`: identifier of the app
+> - `name`: descriptive name of the app
+> - `short_name`: short name that is used in tracking cookie and instrumentation. Should be kept to max 3 characters.
 
 * URL = `/api/app`
 
@@ -173,22 +179,34 @@ Note: Clients shall read and use tracking cookie value for event instrumentation
 }
 ```
 
-### View an App
-
-* URL = `/api/app/<app-id>`
-
-* Method = `GET`
-  
-* Response Body =
-```json
-{
-  "id": "app1",
-  "name": "josh",
-  "short_name": "j"
-}
-```
-
 ### Add or Update a Project
+
+> Add or update a project metadata by posting project data, where a project is defined by
+> - `id`: identifier of the project
+> - `name`: descriptive name of the project
+> - `short_name`: short name that is used in tracking cookie and instrumentation. Should be kept to max 3 characters.
+> - `app`: identifier of the app where this project belongs
+> - `experiments`: a project can have multiple experiments, where an experiment is defined by
+>   - `id`: identifier of the experiment
+>   - `name`: descriptive name of the experiment
+>   - `short_name`: short name that is used in tracking cookie and instrumentation. Should be kept to max 3 characters.
+>   - `kind`: experiment are of 2 kinds - `Experiment` or `Feature`, where `Feature` is an `Experiment` without any variations.
+>   - `version`: version number is automatically incremented on updates to the same experiment.
+>   - `audiences`: experiment is evaluated for audiences, where an audience is defined by
+>       - `name`: descriptive name of the audience
+>       - `audience_kind`: audience are of 2 kinds - `List` or `Script`, `List` is reference (`list_id`) to predefined lists, while `Script` is python expression (`script_src`).
+>       - `size_kind`: size can be specified in 2 kinds - `Percent` or `Absolute`, both are self explanatory.
+>       - `size_value`: corresponding size value, where percent value can be from 1 to 100
+>   - `data`: optional data that is sent back to client for the active experiment.
+>   - `variations`: an experiment can have multiple variations, where a variation is defined by
+>       - `id`: identifier of the variation
+>       - `name`: descriptive name of the variation
+>       - `short_name`: short name that is used in tracking cookie and instrumentation. Should be kept to max 3 characters.
+>       - `size`: variation size can be defined only in percent terms, and all variation size should add upto exactly 100.
+> - `audience_lists`:
+>   - `id`: identifier of the audience list
+>   - `name`: descriptive name of the audience list, eg beta users
+>   - `list`: list of users
 
 * URL = `/api/project`
 
@@ -206,7 +224,6 @@ Note: Clients shall read and use tracking cookie value for event instrumentation
       "id": "onboarding",
       "name": "onboarding",
       "short_name": "onb",
-      "version": 0,
       "kind": "Experiment",
       "audiences": [
         {
@@ -300,7 +317,26 @@ Note: Clients shall read and use tracking cookie value for event instrumentation
 }
 ```
 
+### View an App
+
+> View an app metadata for a given `app-id`
+
+* URL = `/api/app/<app-id>`
+
+* Method = `GET`
+
+* Response Body =
+```json
+{
+  "id": "app1",
+  "name": "josh",
+  "short_name": "j"
+}
+```
+
 #### View a Project
+
+> View a project metadata for a given `app-id` and `project-id`
 
 * URL = `/api/project/<app-id>/<project-id>`
 
@@ -411,10 +447,10 @@ Note: Clients shall read and use tracking cookie value for event instrumentation
   ]
 }
 ```
- 
+
 #### Change rotation status of service
 
-Inverts the OOR status of the service and returns new status
+> Inverts the OOR status of the service and returns new status
 
 * URL = `/oor`
 
@@ -424,7 +460,7 @@ Inverts the OOR status of the service and returns new status
 
 #### View rotation status of service
 
-Returns the rotation status of the service
+> Returns the rotation status of the service
 
 * URL = `/status`
 
