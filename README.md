@@ -194,7 +194,7 @@ cargo build --release
 >   - `version`: version number is automatically incremented on updates to the same experiment.
 >   - `audiences`: experiment is evaluated for audiences, where an audience is defined by
 >       - `name`: descriptive name of the audience
->       - `audience_kind`: audience are of 2 kinds - `List` or `Script`, `List` is reference (`list_id`) to predefined lists, while `Script` is **python expression** (`script_src`).
+>       - `audience_kind`: audience are of 2 kinds - `List` or `Script`, `List` is reference (`list_id`) to predefined lists, while `Script` is [**python expression**](inline-python-scripts-for-audience-condition) (`script_src`).
 >       - `size_kind`: size can be specified in 2 kinds - `Percent` or `Absolute`, both are self explanatory.
 >       - `size_value`: corresponding size value, where percent value can be from 1 to 100
 >   - `data`: optional data that is sent back to client for the active experiment.
