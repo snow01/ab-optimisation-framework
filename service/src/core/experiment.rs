@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::sync::atomic::AtomicU64;
 
 use crossbeam_epoch as epoch;
 use crossbeam_epoch::Guard;
@@ -13,7 +14,6 @@ use crate::server::{HttpError, HttpRequest, HttpResponse, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::variation::Variation;
-use std::sync::atomic::AtomicU64;
 
 #[derive(Serialize, Deserialize)]
 pub struct Experiment {
@@ -52,13 +52,43 @@ pub struct Experiment {
     pub test_size: AtomicU64,
 }
 
+impl PartialEq for Experiment {
+    fn eq(&self, other: &Self) -> bool {
+        (
+            &self.id,
+            &self.name,
+            &self.short_name,
+            &self.version,
+            &self.kind,
+            &self.inactive,
+            &self.start_time,
+            &self.end_time,
+            &self.audiences,
+            &self.variations,
+            &self.data,
+        ) == (
+            &other.id,
+            &other.name,
+            &other.short_name,
+            &other.version,
+            &other.kind,
+            &other.inactive,
+            &other.start_time,
+            &other.end_time,
+            &other.audiences,
+            &other.variations,
+            &other.data,
+        )
+    }
+}
+
 impl HasId for Experiment {
     fn id(&self) -> &str {
         &self.id
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub enum ExperimentKind {
     Feature,
     Experiment,
@@ -86,14 +116,20 @@ pub struct Audience {
     pub picked_size: AtomicU64,
 }
 
-#[derive(Serialize, Deserialize)]
+impl PartialEq for Audience {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.name, &self.audience, &self.size) == (&other.name, &other.audience, &other.size)
+    }
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(tag = "audience_kind")]
 pub enum AudienceSpec {
     Script { script_src: Option<String> },
     List { list_id: String },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(tag = "size_kind")]
 pub enum SizeSpec {
     Absolute {
@@ -103,9 +139,6 @@ pub enum SizeSpec {
     Percent {
         #[serde(alias = "size_value")]
         value: u32,
-        // #[serde(default = "default_sampler")]
-        // #[serde(skip)]
-        // sampler: rand::distributions::Uniform<u64>,
     },
 }
 
@@ -171,8 +204,58 @@ impl AbOptimisationService {
 
             // TODO: identify what got changed
 
+            // (
+            //     &self.id,
+            //     &self.name,
+            //     &self.short_name,
+            //     &self.version,
+            //     &self.kind,
+            //     &self.inactive,
+            //     &self.start_time,
+            //     &self.end_time,
+            //     &self.audiences,
+            //     &self.variations,
+            //     &self.data,
+            // )
+
             if existing_data.name != req_data.name {
                 existing_data.name = req_data.name
+            }
+
+            if existing_data.short_name != req_data.short_name {
+                existing_data.short_name = req_data.short_name
+            }
+
+            if existing_data.version != req_data.version {
+                existing_data.version = req_data.version
+            }
+
+            if existing_data.kind != req_data.kind {
+                existing_data.kind = req_data.kind
+            }
+
+            if existing_data.inactive != req_data.inactive {
+                existing_data.inactive = req_data.inactive
+            }
+
+            if existing_data.start_time != req_data.start_time {
+                existing_data.start_time = req_data.start_time
+            }
+
+            if existing_data.end_time != req_data.end_time {
+                existing_data.end_time = req_data.end_time
+            }
+
+            if existing_data.audiences != req_data.audiences {
+                existing_data.audiences = req_data.audiences
+            }
+
+            if existing_data.variations != req_data.variations {
+                existing_data.variations = req_data.variations
+            }
+
+            if existing_data.data != req_data.data {
+                existing_data.data = req_data.data
             }
 
             self.write_experiment_data(app_id, project_id, &existing_data)?;

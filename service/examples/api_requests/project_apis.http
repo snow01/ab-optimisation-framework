@@ -26,3 +26,42 @@ Content-Type: application/json
   "short_name": "ios"
 }
 
+
+### FOR Ok-cUE-XSGUqyRWiqwKti
+
+### list of projects
+GET http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti
+Accept: application/json
+
+### get specific project
+GET http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti/android
+Accept: application/json
+
+### update existing project
+POST http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
+Content-Type: application/json
+
+{
+  "name": "Android",
+  "short_name": "android"
+}
+
+### create new project
+POST http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti
+Content-Type: application/json
+
+{
+  "name": "Android",
+  "short_name": "android"
+}
+
+### create new project
+POST http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti
+Content-Type: application/json
+
+{
+  "name": "IOS",
+  "short_name": "ios"
+}
+
+

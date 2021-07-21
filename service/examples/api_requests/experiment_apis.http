@@ -1,15 +1,17 @@
-# FOR app1/android
+# FOR Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
 
 ### list of experiments
-GET http://{{host}}/api/experiments/app1/android
+GET http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
 Accept: application/json
 
-### get experiment
-GET http://{{host}}/api/experiments/app1/android/onboarding
-Accept: application/json
+#### get experiment
+#GET http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF/onboarding
+#Accept: application/json
+#
 
-### update existing experiment
-POST http://{{host}}/api/experiments/app1/android/onboarding
+
+### create onboarding experiment
+POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
 Content-Type: application/json
 
 {
@@ -27,80 +29,64 @@ Content-Type: application/json
       "audience_kind": "Script",
       "script_src": "ctx['new_user'] == True and ctx['app_version'] >= '4.7.3'",
       "size_kind": "Percent",
-      "value": 20
-    },
-    {
-      "kind": "Audience",
-      "name": "beta_users",
-      "audience_kind": "List",
-      "list_id": "beta_users",
-      "size_kind": "Absolute",
-      "value": 2
-    }
-  ],
-  "variations": [
-    {
-      "id": "variation1",
-      "name": "variation 1",
-      "short_name": "1",
-      "size": 20,
-      "data": {
-        "a": 1,
-        "b": "b1",
-        "c": "c1",
-        "e": [
-          "e10",
-          "e11",
-          "e12"
-        ],
-        "f": {
-          "f11": "f11"
-        }
-      }
-    },
-    {
-      "id": "variation2",
-      "name": "variation 2",
-      "short_name": "2",
-      "size": 80,
-      "data": {
-        "a": 2,
-        "b": "b2",
-        "c": "c2",
-        "e": [
-          "e20",
-          "e21",
-          "e22"
-        ],
-        "f": {
-          "f12": "f12"
-        }
-      }
+      "value": 5
     }
   ],
   "data": {
-    "a": 0,
-    "b": "b0",
-    "c": "c0",
-    "d": 0,
-    "e": [
-      "e0",
-      "e1",
-      "e2"
-    ],
-    "f": {
-      "f1": "f1"
-    }
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "p_b_i",
+      "p_p_i",
+      "i_s",
+      "f"
+    ]
   }
 }
 
-### create new experiment
-POST http://{{host}}/api/experiments/app1/android
+### update existing experiment
+POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF/nL4sYPJP1BLBMvnON9tHG
 Content-Type: application/json
 
 {
-  "name": "cronet",
-  "short_name": "crnt",
+  "name": "onboarding",
+  "short_name": "onb",
+  "version": 1,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "kind": "Audience",
+      "name": "new_users",
+      "audience_kind": "Script",
+      "script_src": "ctx['new_user'] == True and ctx['app_version'] >= '4.7.3'",
+      "size_kind": "Percent",
+      "value": 100
+    }
+  ],
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "p_b_i",
+      "p_p_i",
+      "i_s",
+      "f"
+    ]
+  }
+}
+
+### create relaunch experiment
+POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
+Content-Type: application/json
+
+{
+  "name": "relaunch",
+  "short_name": "rlnch",
   "version": 0,
   "kind": "Experiment",
   "inactive": false,
@@ -111,10 +97,21 @@ Content-Type: application/json
       "kind": "Audience",
       "name": "new_users",
       "audience_kind": "Script",
-      "script_src": "ctx['app_version'] >= '4.7.3'",
+      "script_src": "ctx['new_user'] == False and ctx['app_version'] >= '4.7.3' and (not ctx['relaunch_onboarding_flow'])",
       "size_kind": "Percent",
-      "value": 20
+      "value": 5
     }
-  ]
+  ],
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "p_b_i",
+      "p_p_i",
+      "i_s",
+      "f"
+    ]
+  }
 }
 

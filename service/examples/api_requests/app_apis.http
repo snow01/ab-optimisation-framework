@@ -17,7 +17,7 @@ POST http://{{host}}/api/apps
 Content-Type: application/json
 
 {
-  "name": "DH App",
-  "short_name": "dh"
+  "name": "Josh Stage App",
+  "short_name": "jstg"
 }
 
