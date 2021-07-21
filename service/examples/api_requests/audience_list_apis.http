@@ -1,0 +1,49 @@
+# FOR app1/android
+
+### list of audience-lists
+GET http://{{host}}/api/audience-lists/app1/android
+Accept: application/json
+
+### get specific  audience-list
+GET http://{{host}}/api/audience-lists/app1/android/beta_users
+Accept: application/json
+
+### update existing experiment
+POST http://{{host}}/api/audience-lists/app1/android/beta_users
+Content-Type: application/json
+
+{
+  "name": "Beta Users",
+  "list": [
+    "3",
+    "8",
+    "5",
+    "6",
+    "9",
+    "1",
+    "4",
+    "7",
+    "2",
+    "10"
+  ]
+}
+
+### create new experiment
+POST http://{{host}}/api/audience-lists/app1/android
+Content-Type: application/json
+
+{
+  "name": "alpha users",
+  "list": [
+    "A3",
+    "A8",
+    "A5",
+    "A6",
+    "A9",
+    "A1",
+    "A4",
+    "A7",
+    "A2"
+  ]
+}
+

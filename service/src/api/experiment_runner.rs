@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::atomic::Ordering;
 
 use anyhow::{anyhow, Context};
@@ -51,7 +52,7 @@ pub struct ActiveExperiment {
 }
 
 impl AbOptimisationService {
-    fn run(
+    fn run_internal(
         &self,
         route: &HttpRoute<'_>,
         req: &ExperimentRequest,
@@ -65,6 +66,9 @@ impl AbOptimisationService {
             .and_then(|app_entry| Ok(app_entry.value()))
             // check project
             .and_then(|app| {
+                let app = app.read();
+                let app = app.deref();
+
                 app.projects
                     .get(&req.project_id, guard)
                     .ok_or_else(|| {
@@ -72,6 +76,8 @@ impl AbOptimisationService {
                     })
                     .and_then(|proj_entry| Ok(proj_entry.value()))
                     .and_then(|proj| {
+                        let proj = proj.read();
+                        let proj = proj.deref();
                         AbOptimisationService::run_for_project(route, &req, app, proj, guard)
                     })
             })
@@ -101,6 +107,7 @@ impl AbOptimisationService {
         // go over all experiments for the project (later to be done in experiment group order)
         for exp_entry in proj.experiments.iter(guard) {
             let experiment = exp_entry.value();
+            let experiment = experiment.read();
 
             if experiment.inactive {
                 continue;
@@ -123,13 +130,15 @@ impl AbOptimisationService {
 
                         let mut selected_variation = None;
                         if let Some(existing_variation) = existing_experiment.variation.as_ref() {
-                            for variation in experiment.variations.iter() {
-                                if existing_variation == &variation.short_name {
-                                    selected_variation = Some(variation.short_name.to_string());
+                            if let Some(variations) = experiment.variations.as_ref() {
+                                for variation in variations.iter() {
+                                    if existing_variation == &variation.short_name {
+                                        selected_variation = Some(variation.short_name.to_string());
 
-                                    data = merge_data(data, variation.data.clone());
+                                        data = merge_data(data, variation.data.clone());
 
-                                    break;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -158,7 +167,7 @@ impl AbOptimisationService {
 
             // else go over all target audience for the experiment, evaluate if user is part and pick for target size
             let (eligible, picked) =
-                AbOptimisationService::sample_experiment(&req, proj, experiment, guard)?;
+                AbOptimisationService::sample_experiment(&req, proj, experiment.deref(), guard)?;
 
             // if not eligible for experiment, skip
             if !eligible {
@@ -169,7 +178,8 @@ impl AbOptimisationService {
             let tracking_experiment;
             if picked {
                 // if matches and picked, set user in test group
-                let (data, picked_variation) = AbOptimisationService::sample_variation(experiment);
+                let (data, picked_variation) =
+                    AbOptimisationService::sample_variation(experiment.deref());
 
                 active_experiments.push(ActiveExperiment {
                     short_name: experiment.short_name.to_string(),
@@ -204,7 +214,7 @@ impl AbOptimisationService {
         };
 
         let experiment_response = ExperimentResponse {
-            app_id: proj.app.to_string(),
+            app_id: app.id.to_string(),
             project_id: proj.id.to_string(),
             tracking_cookie_name,
             active_experiments,
@@ -227,17 +237,19 @@ impl AbOptimisationService {
         let mut cumulative_index = 0;
 
         // if picked and variations exist, pick a variation
-        if experiment.variations.len() > 0 {
-            for variation in experiment.variations.iter() {
-                cumulative_index += variation.size * 100;
+        if let Some(variations) = experiment.variations.as_ref() {
+            if variations.len() > 0 {
+                for variation in variations.iter() {
+                    cumulative_index += variation.size * 100;
 
-                if variation_sample_value < cumulative_index {
-                    // we pick this variant
-                    picked_variation = Some(variation.short_name.to_string());
+                    if variation_sample_value < cumulative_index {
+                        // we pick this variant
+                        picked_variation = Some(variation.short_name.to_string());
 
-                    data = merge_data(data, variation.data.clone());
+                        data = merge_data(data, variation.data.clone());
 
-                    break;
+                        break;
+                    }
                 }
             }
         }
@@ -251,10 +263,14 @@ impl AbOptimisationService {
         experiment: &core::Experiment,
         guard: &Guard,
     ) -> anyhow::Result<(bool, bool)> {
+        // TODO: calculate these seed once
+        let experiment_seed = fasthash::murmur3::hash32(&format!("{}/{}", proj.id, experiment.id));
+
         let mut eligible: bool = false;
         let mut picked: bool = false;
 
         for core::Audience {
+            name,
             audience,
             size,
             picked_size,
@@ -292,7 +308,10 @@ impl AbOptimisationService {
                         HttpError::BadRequest(anyhow!("Audience Spec not found for id: {}", id))
                     })?;
 
-                    if audience_entry.value().list.contains(&req.user_id) {
+                    let audience_list = audience_entry.value();
+                    let audience_list = audience_list.read();
+
+                    if audience_list.list.contains(&req.user_id) {
                         candidate = true;
                     }
                 }
@@ -304,13 +323,23 @@ impl AbOptimisationService {
                 // pick as per size spec
                 match size {
                     core::SizeSpec::Absolute { value } => {
+                        // TODO: better manage absolute
                         if *value > picked_size.fetch_or(0, Ordering::Relaxed) {
                             picked = true;
                         }
                     }
-                    core::SizeSpec::Percent { value, sampler } => {
-                        let mut rng = rand::thread_rng();
-                        if sampler.sample(&mut rng) < value * 100 {
+                    core::SizeSpec::Percent { value, ../*, sampler*/ } => {
+                        // TODO: calculate these seed once
+                        let audience_seed = fasthash::murmur3::hash32(name);
+                        let user_hash_bucket = fasthash::murmur3::hash32_with_seed(
+                            &req.user_id,
+                            experiment_seed + audience_seed,
+                        ) % 10000;
+
+                        // let mut rng = rand::thread_rng();
+                        if
+                        /*sampler.sample(&mut rng)*/
+                        user_hash_bucket < value * 100 {
                             picked = true;
                         }
                     }
@@ -407,32 +436,38 @@ from packaging.version import parse as parse_version
     }
 }
 
-pub async fn run(
-    app: &AbOptimisationService,
-    route: &HttpRoute<'_>,
-    body: Body,
-) -> anyhow::Result<http::Response<Body>> {
-    let req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
+impl AbOptimisationService {
+    pub async fn run(
+        &self,
+        route: &HttpRoute<'_>,
+        body: Body,
+    ) -> anyhow::Result<http::Response<Body>> {
+        let req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
 
-    match app.run(route, &req) {
-        Ok((tracking_data, experiment_response)) => {
-            HttpResponse::binary_or_json(route, &experiment_response).and_then(|mut response| {
-                let cookie_value = tracking_data.to_string();
-                let cookie =
-                    cookie::Cookie::build(experiment_response.tracking_cookie_name, cookie_value)
+        match self.run_internal(route, &req) {
+            Ok((tracking_data, experiment_response)) => {
+                HttpResponse::binary_or_json(route, &experiment_response).and_then(
+                    |mut response| {
+                        let cookie_value = tracking_data.to_string();
+                        let cookie = cookie::Cookie::build(
+                            experiment_response.tracking_cookie_name,
+                            cookie_value,
+                        )
                         .path("/")
                         .permanent()
                         // .secure(true)
                         .http_only(true)
                         .finish();
 
-                response
-                    .headers_mut()
-                    .append(SET_COOKIE, HeaderValue::from_str(&cookie.to_string())?);
+                        response
+                            .headers_mut()
+                            .append(SET_COOKIE, HeaderValue::from_str(&cookie.to_string())?);
 
-                Ok(response)
-            })
+                        Ok(response)
+                    },
+                )
+            }
+            Err(error) => error.into(),
         }
-        Err(error) => error.into(),
     }
 }

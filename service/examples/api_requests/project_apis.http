@@ -1,0 +1,28 @@
+# FOR app1
+
+### list of projects
+GET http://{{host}}/api/projects/app1
+Accept: application/json
+
+### get specific project
+GET http://{{host}}/api/projects/app1/android
+Accept: application/json
+
+### update existing project
+POST http://{{host}}/api/projects/app1/android
+Content-Type: application/json
+
+{
+  "name": "Android",
+  "short_name": "android"
+}
+
+### create new project
+POST http://{{host}}/api/projects/app1
+Content-Type: application/json
+
+{
+  "name": "iOS",
+  "short_name": "ios"
+}
+

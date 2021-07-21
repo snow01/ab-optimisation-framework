@@ -1,0 +1,23 @@
+### list of apps
+GET http://{{host}}/api/apps
+Accept: application/json
+
+### update existing app
+POST http://{{host}}/api/apps/app1
+Content-Type: application/json
+
+{
+  "id": "app1",
+  "name": "Josh App",
+  "short_name": "josh"
+}
+
+### create new app
+POST http://{{host}}/api/apps
+Content-Type: application/json
+
+{
+  "name": "DH App",
+  "short_name": "dh"
+}
+

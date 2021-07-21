@@ -122,6 +122,76 @@ impl HttpResponse {
         Ok(Self::compress_response(route, response))
     }
 
+    pub fn from_vec<S>(route: &HttpRoute<'_>, body: Vec<u8>) -> anyhow::Result<Response<Body>>
+    where
+        S: Serialize,
+    {
+        // let body = serde_json::to_vec(body).with_context(|| "Error in serialising")?;
+        let body = Body::from(body);
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::HOST, get_hostname_header().clone())
+            .body(body)
+            .with_context(|| "Error in building HttpResponse")?;
+
+        Ok(Self::compress_response(route, response))
+    }
+
+    // pub fn response_visitor<S, F>(
+    //     route: &HttpRoute<'_>,
+    //     visitor: F,
+    // ) -> anyhow::Result<Response<Body>>
+    // where
+    //     S: Serializer,
+    //     F: FnOnce(&mut S) -> Result<S::Ok, S::Error>,
+    // {
+    //     let mut body = Vec::with_capacity(128);
+    //     let mut ser =
+    //         serde_json::Serializer::with_formatter(&mut body, serde_json::ser::CompactFormatter);
+    //
+    //     visitor(&mut ser).with_context(|| "Error in serialising")?;
+    //
+    //     // let body = serde_json::to_vec(body).with_context(|| "Error in serialising")?;
+    //     let body = Body::from(body);
+    //
+    //     let response = Response::builder()
+    //         .status(StatusCode::OK)
+    //         .header(header::CONTENT_TYPE, "application/json")
+    //         .header(header::HOST, get_hostname_header().clone())
+    //         .body(body)
+    //         .with_context(|| "Error in building HttpResponse")?;
+    //
+    //     Ok(Self::compress_response(route, response))
+    // }
+    //
+    // fn response_visitor_inner<S, F>(
+    //     route: &HttpRoute<'_>,
+    //     serializer: &mut S,
+    //     visitor: F,
+    // ) -> anyhow::Result<Response<Body>>
+    //     where
+    //         S: Serializer,
+    //         F: FnOnce(&mut S) -> Result<S::Ok, S::Error>,
+    // {
+    //     visitor(serializer).with_context(|| "Error in serialising")?;
+    //
+    //     serializer.
+    //
+    //     // let body = serde_json::to_vec(body).with_context(|| "Error in serialising")?;
+    //     let body = Body::from(body);
+    //
+    //     let response = Response::builder()
+    //         .status(StatusCode::OK)
+    //         .header(header::CONTENT_TYPE, "application/json")
+    //         .header(header::HOST, get_hostname_header().clone())
+    //         .body(body)
+    //         .with_context(|| "Error in building HttpResponse")?;
+    //
+    //     Ok(Self::compress_response(route, response))
+    // }
+
     pub fn compress_response(
         route: &HttpRoute<'_>,
         mut response: Response<Body>,

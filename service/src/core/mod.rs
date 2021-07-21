@@ -7,7 +7,7 @@ pub use project::AudienceList;
 pub use project::Project;
 pub use variation::Variation;
 
-mod app;
+pub mod app;
 mod experiment;
 mod project;
 mod skiplist_serde;
