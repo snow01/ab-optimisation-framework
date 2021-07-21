@@ -51,7 +51,7 @@ impl AbOptimisationService {
     }
 
     pub fn write_app_data(&self, app: &App) -> anyhow::Result<()> {
-        let file_path = format!("{}/{}-app-data.json", apps_directory(), &app.id);
+        let file_path = format!("{}/{}.app.data.json", apps_directory(), &app.id);
 
         info!("Writing app data to file: {}", file_path);
 
@@ -82,7 +82,7 @@ impl AbOptimisationService {
 
     pub fn write_project_data(&self, app_id: &str, proj: &Project) -> anyhow::Result<()> {
         let file_path = format!(
-            "{}/{}-{}-project-data.json",
+            "{}/{}.{}.project.data.json",
             projects_directory(),
             app_id,
             &proj.id
@@ -126,7 +126,7 @@ impl AbOptimisationService {
         experiment: &Experiment,
     ) -> anyhow::Result<()> {
         let file_path = format!(
-            "{}/{}-{}-{}-experiment-data.json",
+            "{}/{}.{}.{}.experiment.data.json",
             experiments_directory(),
             app_id,
             project_id,
@@ -171,7 +171,7 @@ impl AbOptimisationService {
         audience_list: &AudienceList,
     ) -> anyhow::Result<()> {
         let file_path = format!(
-            "{}/{}-{}-{}-audience-list-data.json",
+            "{}/{}.{}.{}.audience-list.data.json",
             audience_lists_directory(),
             app_id,
             project_id,
@@ -216,7 +216,7 @@ fn load_all_apps(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
 (?P<app_id>[A-Za-z0-9_~]+)  # app-id
--app-data.json
+[.]app[.]data.json
 ",
     )
     .unwrap();
@@ -255,9 +255,9 @@ fn load_all_projects(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
 (?P<app_id>[A-Za-z0-9_~]+)  # app-id
--
+[.]
 (?P<project_id>[A-Za-z0-9_~]+) # project-id
--project-data.json
+[.]project[.]data[.]json
 ",
     )
     .unwrap();
@@ -304,11 +304,11 @@ fn load_all_experiments(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
 (?P<app_id>[A-Za-z0-9_~]+)  # app-id
--
+[.]
 (?P<project_id>[A-Za-z0-9_~]+) # project-id
--
+[.]
 (?P<experiment_id>[A-Za-z0-9_~]+)   # experiment-id
--experiment-data.json
+[.]experiment[.]data[.]json
 ",
     )
     .unwrap();
@@ -362,11 +362,11 @@ fn load_all_audience_lists(service: &AbOptimisationService) -> anyhow::Result<()
     let re = Regex::new(
         r"(?x)
 (?P<app_id>[A-Za-z0-9_~]+)  # app-id
--
+.
 (?P<project_id>[A-Za-z0-9_~]+) # project-id
--
+.
 (?P<list_id>[A-Za-z0-9_~]+)   # list-id
--audience-list-data.json
+.audience-list.data.json
 ",
     )
     .unwrap();
