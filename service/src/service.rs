@@ -215,7 +215,7 @@ fn audience_lists_directory() -> String {
 fn load_all_apps(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
-(?P<app_id>[A-Za-z0-9_~]+)  # app-id
+(?P<app_id>[A-Za-z0-9_~-]+)  # app-id
 [.]app[.]data.json
 ",
     )
@@ -254,9 +254,9 @@ fn load_all_apps(service: &AbOptimisationService) -> anyhow::Result<()> {
 fn load_all_projects(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
-(?P<app_id>[A-Za-z0-9_~]+)  # app-id
+(?P<app_id>[A-Za-z0-9_~-]+)  # app-id
 [.]
-(?P<project_id>[A-Za-z0-9_~]+) # project-id
+(?P<project_id>[A-Za-z0-9_~-]+) # project-id
 [.]project[.]data[.]json
 ",
     )
@@ -303,11 +303,11 @@ fn load_all_projects(service: &AbOptimisationService) -> anyhow::Result<()> {
 fn load_all_experiments(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
-(?P<app_id>[A-Za-z0-9_~]+)  # app-id
+(?P<app_id>[A-Za-z0-9_~-]+)  # app-id
 [.]
-(?P<project_id>[A-Za-z0-9_~]+) # project-id
+(?P<project_id>[A-Za-z0-9_~-]+) # project-id
 [.]
-(?P<experiment_id>[A-Za-z0-9_~]+)   # experiment-id
+(?P<experiment_id>[A-Za-z0-9_~-]+)   # experiment-id
 [.]experiment[.]data[.]json
 ",
     )
@@ -361,11 +361,11 @@ fn load_all_experiments(service: &AbOptimisationService) -> anyhow::Result<()> {
 fn load_all_audience_lists(service: &AbOptimisationService) -> anyhow::Result<()> {
     let re = Regex::new(
         r"(?x)
-(?P<app_id>[A-Za-z0-9_~]+)  # app-id
+(?P<app_id>[A-Za-z0-9_~-]+)  # app-id
 .
-(?P<project_id>[A-Za-z0-9_~]+) # project-id
+(?P<project_id>[A-Za-z0-9_~-]+) # project-id
 .
-(?P<list_id>[A-Za-z0-9_~]+)   # list-id
+(?P<list_id>[A-Za-z0-9_~-]+)   # list-id
 .audience-list.data.json
 ",
     )
