@@ -1,9 +1,10 @@
+use std::fmt::{Display, Formatter};
+
 use anyhow::{bail, Context};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use pest::Parser;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
 
 use crate::api::common::ExperimentMemberKind;
 
@@ -29,7 +30,7 @@ impl Display for TrackingData {
         let mut first = true;
         for experiment in self.experiments.iter() {
             if !first {
-                write!(f, ";")?;
+                write!(f, "~")?;
             }
 
             write!(f, "{}", experiment)?;
@@ -44,7 +45,7 @@ impl Display for Experiment {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{},{},{},{}",
+            "{}|{}|{}|{}",
             self.short_name,
             self.version,
             self.member_kind,
@@ -54,6 +55,18 @@ impl Display for Experiment {
 }
 
 impl ExperimentTrackingCookieParser {
+    pub fn parse_str_no_err(value: &str) -> TrackingData {
+        match ExperimentTrackingCookieParser::parse_str(value) {
+            Ok(result) => result,
+            Err(err) => {
+                warn!("Error in parsing cookie: {} ==> {:?}", value, err);
+                TrackingData {
+                    experiments: vec![],
+                }
+            }
+        }
+    }
+
     pub fn parse_str(value: &str) -> anyhow::Result<TrackingData> {
         if value.is_empty() {
             return Ok(TrackingData {

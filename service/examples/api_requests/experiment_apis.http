@@ -45,14 +45,14 @@ Content-Type: application/json
   }
 }
 
-### update existing experiment
+### update onboarding experiment
 POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF/nL4sYPJP1BLBMvnON9tHG
 Content-Type: application/json
 
 {
   "name": "onboarding",
   "short_name": "onb",
-  "version": 1,
+  "version": 2,
   "kind": "Experiment",
   "inactive": false,
   "start_time": null,
@@ -62,7 +62,7 @@ Content-Type: application/json
       "kind": "Audience",
       "name": "new_users",
       "audience_kind": "Script",
-      "script_src": "ctx['new_user'] == True and ctx['app_version'] >= '4.7.3'",
+      "script_src": "ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3'",
       "size_kind": "Percent",
       "value": 100
     }
@@ -112,6 +112,95 @@ Content-Type: application/json
       "i_s",
       "f"
     ]
+  }
+}
+
+### update relaunch experiment
+POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF/_Qjw19dMdVIf9CJwDtSgN
+Content-Type: application/json
+
+{
+  "name": "relaunch",
+  "short_name": "rlnch",
+  "version": 2,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "kind": "Audience",
+      "name": "new_users",
+      "audience_kind": "Script",
+      "script_src": "not ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3' and not ctx.get('relaunch_onboarding_flow', False)",
+      "size_kind": "Percent",
+      "value": 100
+    }
+  ],
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "p_b_i",
+      "p_p_i",
+      "i_s",
+      "f"
+    ]
+  }
+}
+
+### create cronet experiment
+POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
+Content-Type: application/json
+
+{
+  "name": "cronet",
+  "short_name": "crnt",
+  "version": 0,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "kind": "Audience",
+      "name": "new_users",
+      "audience_kind": "Script",
+      "script_src": "ctx['app_version'] >= '4.7.3'",
+      "size_kind": "Percent",
+      "value": 50
+    }
+  ],
+  "data": {
+    "da_factory":"cronet"
+  }
+}
+
+### update cronet experiment
+POST http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF/uozzmUfCHsmVitB0XAJWl
+Content-Type: application/json
+
+{
+  "name": "cronet",
+  "short_name": "crnt",
+  "version": 2,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "kind": "Audience",
+      "name": "new_users",
+      "audience_kind": "Script",
+      "script_src": "ctx.get('app_version', '0.0.0') >= '4.7.3'",
+      "size_kind": "Percent",
+      "value": 50
+    }
+  ],
+  "data": {
+    "da_factory":"cronet"
   }
 }
 

@@ -415,12 +415,12 @@ from packaging.version import parse as parse_version
                         let cookie_value = /*base64::decode(*/cookie.value()/*)
                         .with_context(|| format!("Error in decoding cookie data from base64"))?*/;
                         let experiment_cookie: experiment_tracking_data::TrackingData =
-                            experiment_tracking_data::ExperimentTrackingCookieParser::parse_str(
+                            experiment_tracking_data::ExperimentTrackingCookieParser::parse_str_no_err(
                                 cookie_value,
                             )
-                            .with_context(|| {
+                            /*.with_context(|| {
                                 format!("Error in deserializing to Experiment Cookie")
-                            })?;
+                            })?*/;
 
                         // info!("Experiment Cookie: {:?}", experiment_cookie);
 
