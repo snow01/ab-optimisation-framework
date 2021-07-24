@@ -12,7 +12,7 @@ mod experiment_tracking_data;
 #[async_trait]
 impl Service for AbOptimisationService {
     async fn api_handler<'a>(
-        &self,
+        &'a self,
         body: Body,
         route: &HttpRoute<'a>,
         path: &[&str],

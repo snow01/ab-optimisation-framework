@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::atomic::Ordering;
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use crossbeam_epoch as epoch;
 use crossbeam_epoch::Guard;
 use hyper::header::SET_COOKIE;
@@ -19,8 +19,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 use crate::api::common::merge_data;
-use crate::api::experiment_tracking_data;
+use crate::api::experiment_tracking_data::{TrackedExperiment, TrackingData, TrackingDataParser};
 use crate::core;
+use crate::core::{Project, TrackingMethod};
 use crate::server::{HttpError, HttpRequest, HttpResponse, HttpRoute};
 use crate::service::AbOptimisationService;
 
@@ -31,17 +32,20 @@ pub struct ExperimentRequest {
     pub app_id: String,
     pub project_id: String,
     pub user_id: String,
-    // pub experiment_history: Option<ExperimentHistory>,
     pub context: Option<JsonValue>,
+    pub tracking_data: Option<String>,
+
+    #[serde(skip)]
+    experiment_start_time: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExperimentResponse {
-    pub app_id: String,
-    pub project_id: String,
-    pub tracking_cookie_name: String,
+pub struct ExperimentResponse<'a> {
+    pub app_id: &'a str,
+    pub project_id: &'a str,
     pub active_experiments: Vec<ActiveExperiment>,
-    // pub context_data: ContextData,
+    pub tracking_cookie_name: Option<String>,
+    pub tracking_data: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,134 +56,172 @@ pub struct ActiveExperiment {
 }
 
 impl AbOptimisationService {
-    fn run_internal(
-        &self,
-        route: &HttpRoute<'_>,
-        req: &ExperimentRequest,
-    ) -> Result<(experiment_tracking_data::TrackingData, ExperimentResponse), HttpError> {
+    fn run_internal<'a, F, R>(
+        &'a self,
+        route: &HttpRoute<'a>,
+        req: &'a ExperimentRequest,
+        result_visitor: F,
+    ) -> R
+    where
+        F: FnOnce(Result<ExperimentResponse, HttpError>) -> R,
+    {
         let guard = &epoch::pin();
 
         // check app
-        self.apps
-            .get(&req.app_id, guard)
-            .ok_or_else(|| HttpError::NotFound(format!("App:{} not found", req.app_id)))
-            .and_then(|app_entry| Ok(app_entry.value()))
-            // check project
-            .and_then(|app| {
-                let app = app.read();
-                let app = app.deref();
+        let app_entry = self.apps.get(&req.app_id, guard);
+        match app_entry {
+            None => result_visitor(Err(HttpError::NotFound(format!(
+                "App:{} not found",
+                req.app_id
+            )))),
+            Some(app_entry) => {
+                let app_lock = app_entry.value();
+                let app = app_lock.read();
 
-                app.projects
-                    .get(&req.project_id, guard)
-                    .ok_or_else(|| {
-                        HttpError::NotFound(format!("Project:{} not found", req.project_id))
-                    })
-                    .and_then(|proj_entry| Ok(proj_entry.value()))
-                    .and_then(|proj| {
-                        let proj = proj.read();
-                        let proj = proj.deref();
-                        AbOptimisationService::run_for_project(route, &req, app, proj, guard)
-                    })
-            })
+                let proj_entry = app.projects.get(&req.project_id, guard);
+                match proj_entry {
+                    None => result_visitor(Err(HttpError::NotFound(format!(
+                        "Project:{} not found",
+                        req.project_id
+                    )))),
+                    Some(proj_entry) => {
+                        let proj_lock = proj_entry.value();
+                        let proj = proj_lock.read();
+
+                        let result =
+                            AbOptimisationService::run_for_project(route, &req, &app, &proj, guard);
+                        result_visitor(result)
+                    }
+                }
+            }
+        }
     }
 
-    fn run_for_project(
+    fn run_for_project<'a>(
         route: &HttpRoute<'_>,
-        req: &ExperimentRequest,
-        app: &core::App,
-        proj: &core::Project,
-        guard: &Guard,
-    ) -> Result<(experiment_tracking_data::TrackingData, ExperimentResponse), HttpError> {
-        let tracking_cookie_name = AbOptimisationService::tracking_cookie_name(app, proj);
+        req: &'a ExperimentRequest,
+        app: &'a core::App,
+        proj: &'a core::Project,
+        guard: &'a Guard,
+    ) -> Result<ExperimentResponse<'a>, HttpError> {
+        let tracking_cookie_name = Self::tracking_cookie_name(&app, &proj);
 
-        let mut tracked_experiments = Vec::<experiment_tracking_data::Experiment>::new();
+        // get tracking history
+        let tracking_history =
+            Self::parse_tracking_history(route, req, &proj, &tracking_cookie_name)?;
 
-        // info!("Request headers: {:?}", route.req.headers());
-
-        // identify existing experiments if any - parse cookies for this
-        let existing_experiments =
-            AbOptimisationService::parse_tracking_cookie(route, &tracking_cookie_name)?;
+        // build map from tracking history to the version
+        let tracking_history = Self::build_tracking_history_map(tracking_history);
 
         // LATER: parse cookie / header / context into final context object - not needed immediately...
 
+        let mut tracked_experiments = Vec::<TrackedExperiment>::new();
         let mut active_experiments = Vec::<ActiveExperiment>::new();
 
         // go over all experiments for the project (later to be done in experiment group order)
         for exp_entry in proj.experiments.iter(guard) {
-            let experiment = exp_entry.value();
-            let experiment = experiment.read();
+            let exp_lock = exp_entry.value();
+            let experiment = exp_lock.read();
 
+            // todo: check for schedule
             if experiment.inactive {
                 continue;
             }
 
-            // todo: check for schedule
+            let existing_experiment = tracking_history.get(&experiment.short_name);
 
-            match existing_experiments.get(&experiment.short_name) {
-                None => {}
-                Some(existing_experiment) => {
-                    if existing_experiment.version == experiment.version {
-                        tracked_experiments.push(existing_experiment.clone());
+            // sample user for the experiment
+            let (targeting_eligible, frequency_eligible, mut picked) = Self::sample_experiment(
+                &req,
+                &proj,
+                experiment.deref(),
+                existing_experiment,
+                guard,
+            )?;
 
-                        if existing_experiment.member_kind == ExperimentMemberKind::Control {
-                            continue;
+            if !targeting_eligible {
+                // identify if experiment was in tracking history... copy as it is
+                if let Some(existing_experiment) = existing_experiment {
+                    tracked_experiments.push(existing_experiment.clone());
+                }
+
+                continue;
+            }
+
+            // targeting eligible, but not frequency eligible... we just increment invocation for maintaining frequency
+            if !frequency_eligible {
+                if let Some(existing_experiment) = existing_experiment {
+                    let mut existing_experiment = existing_experiment.clone();
+                    existing_experiment.total_invocation_count += 1;
+                    existing_experiment.invocation_date = req.experiment_start_time;
+                    existing_experiment.invocation_version = experiment.version;
+
+                    tracked_experiments.push(existing_experiment);
+                }
+
+                // it doesn't make sense to add an experiment in tracked one, if it was not invoked ever
+                /*else {
+                    experiment_tracking_data::Experiment {
+                        short_name: experiment.short_name.to_string(),
+                        last_selection_version: 0,
+                        last_selection_member_kind: None,
+                        last_selection_variation: None,
+                        last_selection_date: 0,
+                        total_selection_count: 0,
+                        last_invocation_date: req.experiment_start_time,
+                        last_invocation_version: experiment.version,
+                        total_invocation_count: 1,
+                    }
+                };*/
+
+                continue;
+            }
+
+            // user is both targeting and frequency eligible
+            let mut existing_variation = None;
+            let mut total_selection_count = 0;
+            let mut total_invocation_count = 0;
+
+            if let Some(existing_experiment) = existing_experiment {
+                total_selection_count = existing_experiment.total_selection_count;
+                total_invocation_count = existing_experiment.total_invocation_count;
+
+                // we reduce count, because we will again increment as per new logic
+                match existing_experiment.selected_member_kind {
+                    ExperimentMemberKind::Control => {
+                        experiment.control_size.fetch_sub(1, Ordering::Relaxed);
+                    }
+                    ExperimentMemberKind::Test => {
+                        experiment.test_size.fetch_sub(1, Ordering::Relaxed);
+                    }
+                }
+
+                // no change in experiment config
+                // pick as per existing experiment data
+                if existing_experiment.invocation_version == experiment.version {
+                    existing_variation = existing_experiment.selected_variation.as_ref();
+
+                    match existing_experiment.selected_member_kind {
+                        ExperimentMemberKind::Control => {
+                            picked = false;
                         }
-
-                        // if existing experiment and same version - keep this experiment
-                        let mut data = experiment.data.clone();
-
-                        let mut selected_variation = None;
-                        if let Some(existing_variation) = existing_experiment.variation.as_ref() {
-                            if let Some(variations) = experiment.variations.as_ref() {
-                                for variation in variations.iter() {
-                                    if existing_variation == &variation.short_name {
-                                        selected_variation = Some(variation.short_name.to_string());
-
-                                        data = merge_data(data, variation.data.clone());
-
-                                        break;
-                                    }
-                                }
-                            }
+                        ExperimentMemberKind::Test => {
+                            picked = true;
                         }
-
-                        active_experiments.push(ActiveExperiment {
-                            short_name: experiment.short_name.to_string(),
-                            variation: selected_variation,
-                            data,
-                        });
-
-                        continue;
-                    } else {
-                        // todo: if existing experiment and version change - do something extra ?
-                        // version change can be because of
-                        //      - change in audience spec or size
-                        //      - change in variations or size
-                        // if audience spec changed -- user may not be anymore part of the eligible set.
-                        // if audience size increased -- it is fine to keep user
-                        // if audience size decreased -- we may need to re-evaluate user's eligibility
-                        // if change in variations -- experiment is kept, but user may need to be assigned to different variant
-                        // if variant size increased -- experiment is kept, variation is kept
-                        // if variant size decreased -- experiment is kept, reassign variant
                     }
                 }
             }
 
-            // else go over all target audience for the experiment, evaluate if user is part and pick for target size
-            let (eligible, picked) =
-                AbOptimisationService::sample_experiment(&req, proj, experiment.deref(), guard)?;
-
-            // if not eligible for experiment, skip
-            if !eligible {
-                continue;
-            }
-
-            // if matches audience but not picked, set user in control group
-            let tracking_experiment;
+            // make variation selection
+            let mut selected_variation = None;
+            let selected_member_kind;
             if picked {
-                // if matches and picked, set user in test group
                 let (data, picked_variation) =
-                    AbOptimisationService::sample_variation(experiment.deref());
+                    AbOptimisationService::sample_variation(experiment.deref(), existing_variation);
+
+                if let Some(picked_variation) = picked_variation.as_ref() {
+                    selected_variation = Some(picked_variation.to_string())
+                }
 
                 active_experiments.push(ActiveExperiment {
                     short_name: experiment.short_name.to_string(),
@@ -187,68 +229,155 @@ impl AbOptimisationService {
                     data,
                 });
 
+                selected_member_kind = ExperimentMemberKind::Test;
                 experiment.test_size.fetch_add(1, Ordering::Relaxed);
-
-                tracking_experiment = experiment_tracking_data::Experiment {
-                    short_name: experiment.short_name.to_string(),
-                    version: experiment.version,
-                    member_kind: ExperimentMemberKind::Test,
-                    variation: picked_variation,
-                };
             } else {
+                selected_member_kind = ExperimentMemberKind::Control;
                 experiment.control_size.fetch_add(1, Ordering::Relaxed);
-
-                tracking_experiment = experiment_tracking_data::Experiment {
-                    short_name: experiment.short_name.to_string(),
-                    version: experiment.version,
-                    member_kind: ExperimentMemberKind::Control,
-                    variation: None,
-                };
             }
+
+            let tracking_experiment = TrackedExperiment {
+                short_name: experiment.short_name.to_string(),
+                invocation_version: experiment.version,
+                selected_member_kind,
+                selected_variation,
+                selection_date: req.experiment_start_time,
+                total_selection_count: total_selection_count + 1,
+                invocation_date: req.experiment_start_time,
+                total_invocation_count: total_invocation_count + 1,
+                selected_version: experiment.version,
+            };
 
             tracked_experiments.push(tracking_experiment);
         }
 
-        let tracking_data = experiment_tracking_data::TrackingData {
+        let tracking_data = TrackingData {
             experiments: tracked_experiments,
         };
 
         let experiment_response = ExperimentResponse {
-            app_id: app.id.to_string(),
-            project_id: proj.id.to_string(),
-            tracking_cookie_name,
+            app_id: &app.id,
+            project_id: &proj.id,
+            tracking_cookie_name: Some(tracking_cookie_name),
             active_experiments,
-            // context_data: ExperimentHistory {},
+            tracking_data: Some(tracking_data.to_string()),
         };
 
-        Ok((tracking_data, experiment_response))
+        Ok(experiment_response)
+    }
+
+    fn build_tracking_history_map(
+        tracking_history: Option<TrackingData>,
+    ) -> HashMap<String, TrackedExperiment> {
+        match tracking_history {
+            None => HashMap::new(),
+            Some(tracking_history) => {
+                let mut map: HashMap<String, TrackedExperiment> = HashMap::new();
+
+                // experiments would be reverse sorted by version number
+                for experiment in tracking_history.experiments.into_iter() {
+                    match map.get(&experiment.short_name) {
+                        None => {
+                            map.insert(experiment.short_name.to_string(), experiment);
+                        }
+                        Some(existing_value) => {
+                            if experiment.invocation_version > existing_value.invocation_version {
+                                map.insert(experiment.short_name.to_string(), experiment);
+                            }
+                        }
+                    }
+                }
+
+                map
+            }
+        }
+    }
+
+    fn parse_tracking_history(
+        route: &HttpRoute,
+        req: &ExperimentRequest,
+        proj: &Project,
+        tracking_cookie_name: &String,
+    ) -> Result<Option<TrackingData>, Error> {
+        match proj.tracking_method {
+            TrackingMethod::Both => {
+                // first try with response...
+                if let Some(tracking_data) = req.tracking_data.as_ref() {
+                    let tracking_data = TrackingDataParser::parse_tracking_data(tracking_data)
+                        .with_context(|| {
+                            format!(
+                                "Error in deserializing tracking_data in request to TrackingData"
+                            )
+                        })?;
+
+                    Ok(Some(tracking_data))
+                } else {
+                    // if none, then cookie...
+                    AbOptimisationService::parse_tracking_cookie(route, &tracking_cookie_name)
+                }
+            }
+            TrackingMethod::Cookie => {
+                // parse with cookie
+                AbOptimisationService::parse_tracking_cookie(route, &tracking_cookie_name)
+            }
+            TrackingMethod::Data => {
+                // parse with response
+                if let Some(tracking_data) = req.tracking_data.as_ref() {
+                    let tracking_data = TrackingDataParser::parse_tracking_data(tracking_data)
+                        .with_context(|| {
+                            format!(
+                                "Error in deserializing tracking_data in request to TrackingData"
+                            )
+                        })?;
+
+                    Ok(Some(tracking_data))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
     }
 
     fn sample_variation(
         experiment: &core::Experiment,
+        existing_variation_name: Option<&String>,
     ) -> (Option<serde_json::Value>, Option<String>) {
         let mut picked_variation: Option<String> = None;
 
         let mut data: Option<serde_json::Value> = experiment.data.clone();
 
-        let mut rng = rand::thread_rng();
-        let variation_sample_value = experiment.variation_sampler.sample(&mut rng);
-
-        let mut cumulative_index = 0;
-
         // if picked and variations exist, pick a variation
         if let Some(variations) = experiment.variations.as_ref() {
             if variations.len() > 0 {
-                for variation in variations.iter() {
-                    cumulative_index += variation.size * 100;
+                match existing_variation_name {
+                    None => {
+                        let mut rng = rand::thread_rng();
+                        let variation_sample_value = experiment.variation_sampler.sample(&mut rng);
 
-                    if variation_sample_value < cumulative_index {
-                        // we pick this variant
-                        picked_variation = Some(variation.short_name.to_string());
+                        let mut cumulative_index = 0;
 
-                        data = merge_data(data, variation.data.clone());
+                        for variation in variations.iter() {
+                            cumulative_index += variation.size * 100;
 
-                        break;
+                            if variation_sample_value < cumulative_index {
+                                // we pick this variant
+                                picked_variation = Some(variation.short_name.to_string());
+
+                                data = merge_data(data, variation.data.clone());
+
+                                break;
+                            }
+                        }
+                    }
+                    Some(existing_variation_name) => {
+                        if let Some(variation) = variations
+                            .iter()
+                            .find(|variation| &variation.short_name == existing_variation_name)
+                        {
+                            picked_variation = Some(variation.short_name.to_string());
+
+                            data = merge_data(data, variation.data.clone());
+                        }
                     }
                 }
             }
@@ -261,64 +390,92 @@ impl AbOptimisationService {
         req: &ExperimentRequest,
         proj: &core::Project,
         experiment: &core::Experiment,
+        tracked_experiment: Option<&TrackedExperiment>,
         guard: &Guard,
-    ) -> anyhow::Result<(bool, bool)> {
+    ) -> anyhow::Result<(bool, bool, bool)> {
         // TODO: calculate these seed once
         let experiment_seed = fasthash::murmur3::hash32(&format!("{}/{}", proj.id, experiment.id));
 
-        let mut eligible: bool = false;
+        let mut targeting_eligible: bool = false;
         let mut picked: bool = false;
+
+        // match frequency constraint
+        let frequency_eligible;
+        match (experiment.frequency_constraint.as_ref(), tracked_experiment) {
+            (Some(frequency_constraint), Some(tracked_experiment)) => {
+                // TODO: build context for frequency constraint
+                frequency_eligible = AbOptimisationService::evaluate_frequency_constraint(
+                    tracked_experiment,
+                    req.context.as_ref(),
+                    frequency_constraint,
+                )
+                .with_context(|| {
+                    format!(
+                        "frequency_constraint=\"{}\" tracked_experiment={:?} ctx={:?}, experiment={}",
+                        frequency_constraint,
+                        tracked_experiment,
+                        req.context.as_ref(),
+                        experiment.short_name
+                    )
+                })?;
+            }
+            _ => {
+                frequency_eligible = true;
+            }
+        }
 
         for core::Audience {
             name,
             audience,
             size,
             picked_size,
+            script_src,
             ..
         } in experiment.audiences.iter()
         {
-            let mut candidate = true;
-
-            match audience {
-                core::AudienceSpec::Script { script_src } => {
-                    match script_src {
-                        None => {
-                            // matches all
-                            candidate = true;
-                        }
-                        Some(condition) => {
-                            // evaluate expression
-                            candidate = AbOptimisationService::evaluate_condition(
-                                req.context.as_ref(),
-                                condition,
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "script_src=\"{}\" ctx={:?}, experiment={}",
-                                    condition,
-                                    req.context.as_ref(),
-                                    experiment.short_name
-                                )
-                            })?;
-                        }
-                    }
+            let matches_script;
+            match script_src {
+                None => {
+                    // matches all
+                    matches_script = true;
                 }
-                core::AudienceSpec::List { list_id: id } => {
-                    let audience_entry = proj.audience_lists.get(id, guard).ok_or_else(|| {
-                        HttpError::BadRequest(anyhow!("Audience Spec not found for id: {}", id))
+                Some(condition) => {
+                    // evaluate expression
+                    matches_script = AbOptimisationService::evaluate_audience_condition(
+                        req.context.as_ref(),
+                        condition,
+                    )
+                    .with_context(|| {
+                        format!(
+                            "script_src=\"{}\" ctx={:?}, experiment={}",
+                            condition,
+                            req.context.as_ref(),
+                            experiment.short_name
+                        )
                     })?;
-
-                    let audience_list = audience_entry.value();
-                    let audience_list = audience_list.read();
-
-                    if audience_list.list.contains(&req.user_id) {
-                        candidate = true;
-                    }
                 }
             }
 
-            if candidate {
-                eligible = true;
+            let mut matches_list = false;
+            if let core::AudienceSpec::List { list_id: id } = audience {
+                let audience_entry = proj.audience_lists.get(id, guard).ok_or_else(|| {
+                    HttpError::BadRequest(anyhow!("Audience Spec not found for id: {}", id))
+                })?;
+
+                let audience_list = audience_entry.value();
+                let audience_list = audience_list.read();
+
+                if audience_list.list.contains(&req.user_id) {
+                    matches_list = true;
+                } else {
+                    matches_list = false;
+                }
+            }
+
+            let audience_candidate = matches_script && matches_list;
+
+            if audience_candidate {
+                targeting_eligible = true;
 
                 // pick as per size spec
                 match size {
@@ -336,10 +493,12 @@ impl AbOptimisationService {
                             experiment_seed + audience_seed,
                         ) % 10000;
 
+                        let user_hash_bucket = user_hash_bucket as i64;
+
                         // let mut rng = rand::thread_rng();
                         if
                         /*sampler.sample(&mut rng)*/
-                        user_hash_bucket < value * 100 {
+                        user_hash_bucket < (value * 100) {
                             picked = true;
                         }
                     }
@@ -352,10 +511,39 @@ impl AbOptimisationService {
             }
         }
 
-        Ok((eligible, picked))
+        Ok((targeting_eligible, frequency_eligible, picked))
     }
 
-    fn evaluate_condition(ctx: Option<&JsonValue>, script_src: &str) -> anyhow::Result<bool> {
+    fn evaluate_frequency_constraint(
+        experiment: &TrackedExperiment,
+        ctx: Option<&JsonValue>,
+        script_src: &str,
+    ) -> anyhow::Result<bool> {
+        Python::with_gil(|py| -> anyhow::Result<bool> {
+            let python_ctx = pythonize(py, &ctx)
+                .with_context(|| format!("Error in converting context into python object"))?;
+            let python_experiment = pythonize(py, &experiment)
+                .with_context(|| format!("Error in converting context into python object"))?;
+            let locals = [("ctx", python_ctx), ("experiment", python_experiment)].into_py_dict(py);
+
+            let fns = AbOptimisationService::build_common_script_module(py)?;
+
+            let globals = [("fns", fns)].into_py_dict(py);
+
+            let result = py
+                .eval(script_src, Some(&globals), Some(&locals))
+                .with_context(|| format!("Error in evaluating script"))?;
+
+            result
+                .extract()
+                .with_context(|| format!("Error in extracting boolean result"))
+        })
+    }
+
+    fn evaluate_audience_condition(
+        ctx: Option<&JsonValue>,
+        script_src: &str,
+    ) -> anyhow::Result<bool> {
         Python::with_gil(|py| -> anyhow::Result<bool> {
             let python_ctx = pythonize(py, &ctx)
                 .with_context(|| format!("Error in converting context into python object"))?;
@@ -380,6 +568,7 @@ impl AbOptimisationService {
             py,
             r#"
 from packaging.version import parse as parse_version
+from datetime import date,time,datetime,timedelta
                 "#,
             "fns.py",
             "fns",
@@ -394,10 +583,7 @@ from packaging.version import parse as parse_version
     fn parse_tracking_cookie(
         route: &HttpRoute,
         tracking_cookie_name: &String,
-    ) -> anyhow::Result<HashMap<String, experiment_tracking_data::Experiment>> {
-        let mut existing_experiments =
-            HashMap::<String, experiment_tracking_data::Experiment>::new();
-
+    ) -> anyhow::Result<Option<TrackingData>> {
         match route.req.headers().get(hyper::header::COOKIE) {
             None => {}
             Some(cookie_header) => {
@@ -409,65 +595,70 @@ from packaging.version import parse as parse_version
                     let cookie = cookie::Cookie::parse(cookie_part)
                         .with_context(|| format!("Error in parsing cookie"))?;
 
-                    // info!("Cookie name we got: {}", cookie.name());
-
                     if cookie.name() == tracking_cookie_name {
-                        let cookie_value = /*base64::decode(*/cookie.value()/*)
-                        .with_context(|| format!("Error in decoding cookie data from base64"))?*/;
-                        let experiment_cookie: experiment_tracking_data::TrackingData =
-                            experiment_tracking_data::ExperimentTrackingCookieParser::parse_str_no_err(
-                                cookie_value,
-                            )
-                            /*.with_context(|| {
-                                format!("Error in deserializing to Experiment Cookie")
-                            })?*/;
+                        let cookie_value = cookie.value();
+                        let tracking_data = TrackingDataParser::parse_tracking_data(cookie_value)
+                            .with_context(|| {
+                            format!("Error in deserializing tracking cookie to TrackingData")
+                        })?;
 
-                        // info!("Experiment Cookie: {:?}", experiment_cookie);
-
-                        for exp in experiment_cookie.experiments {
-                            existing_experiments.insert(exp.short_name.to_string(), exp);
-                        }
+                        return Ok(Some(tracking_data));
                     }
                 }
             }
         }
 
-        Ok(existing_experiments)
+        Ok(None)
     }
 }
 
 impl AbOptimisationService {
-    pub async fn run(
-        &self,
-        route: &HttpRoute<'_>,
+    pub async fn run<'a>(
+        &'a self,
+        route: &HttpRoute<'a>,
         body: Body,
     ) -> anyhow::Result<http::Response<Body>> {
-        let req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
+        let mut req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
 
-        match self.run_internal(route, &req) {
-            Ok((tracking_data, experiment_response)) => {
-                HttpResponse::binary_or_json(route, &experiment_response).and_then(
-                    |mut response| {
-                        let cookie_value = tracking_data.to_string();
-                        let cookie = cookie::Cookie::build(
-                            experiment_response.tracking_cookie_name,
-                            cookie_value,
-                        )
-                        .path("/")
-                        .permanent()
-                        // .secure(true)
-                        .http_only(true)
-                        .finish();
+        req.experiment_start_time = chrono::Utc::now().timestamp();
 
-                        response
-                            .headers_mut()
-                            .append(SET_COOKIE, HeaderValue::from_str(&cookie.to_string())?);
+        let process_result = |result: Result<ExperimentResponse, HttpError>| {
+            match result {
+                Ok(experiment_response) => {
+                    HttpResponse::binary_or_json(route, &experiment_response).and_then(
+                        |mut response| {
+                            // TODO: depends on whether we are doing cookie tracking
+                            if let Some(tracking_cookie_name) =
+                                experiment_response.tracking_cookie_name.as_ref()
+                            {
+                                let cookie_value = match experiment_response.tracking_data.as_ref()
+                                {
+                                    None => "",
+                                    Some(tracking_data) => tracking_data,
+                                };
 
-                        Ok(response)
-                    },
-                )
+                                let cookie =
+                                    cookie::Cookie::build(tracking_cookie_name, cookie_value)
+                                        .path("/")
+                                        .permanent()
+                                        // .secure(true) // TODO: depends on installation setting
+                                        .http_only(true)
+                                        .finish();
+
+                                response.headers_mut().append(
+                                    SET_COOKIE,
+                                    HeaderValue::from_str(&cookie.to_string())?,
+                                );
+                            }
+
+                            Ok(response)
+                        },
+                    )
+                }
+                Err(error) => error.into(),
             }
-            Err(error) => error.into(),
-        }
+        };
+
+        self.run_internal(route, &req, process_result)
     }
 }

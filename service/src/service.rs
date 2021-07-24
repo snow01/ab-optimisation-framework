@@ -76,6 +76,8 @@ impl AbOptimisationService {
                 RwLock::new(project),
                 guard,
             );
+
+            Ok(())
         })
         .with_context(|| format!("Error in loading project from file: {}", file))
     }
@@ -115,6 +117,8 @@ impl AbOptimisationService {
                 RwLock::new(experiment),
                 guard,
             );
+
+            Ok(())
         })
         .with_context(|| format!("Error in loading experiment from file: {}", file))
     }
@@ -160,6 +164,8 @@ impl AbOptimisationService {
                 RwLock::new(audience_list),
                 guard,
             );
+
+            Ok(())
         })
         .with_context(|| format!("Error in loading audience list from file: {}", file))
     }

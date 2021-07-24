@@ -1,25 +1,32 @@
 use std::ops::Deref;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicI64, AtomicU64};
 
+use anyhow::{anyhow, Context};
 use crossbeam_epoch as epoch;
 use crossbeam_epoch::Guard;
 use hyper::Body;
+use itertools::Itertools;
 use nanoid::nanoid;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use validator::{Validate, ValidationError};
 
-use crate::core::{skiplist_serde, HasId, Project};
-use crate::server::{HttpError, HttpRequest, HttpResponse, HttpRoute};
+use crate::core::{skiplist_serde, AddResponse, HasId, Project};
+use crate::server::{HttpRequest, HttpResponse, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::variation::Variation;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Validate)]
 pub struct Experiment {
     #[serde(skip_deserializing)]
     pub id: String,
+
+    #[validate(length(min = 1))]
     pub name: String,
+
+    #[validate(length(min = 1, max = 5))]
     pub short_name: String,
 
     #[serde(default)]
@@ -34,9 +41,17 @@ pub struct Experiment {
     pub start_time: Option<String>,
     pub end_time: Option<String>,
 
+    #[validate]
+    #[validate(length(min = 1))]
+    #[validate(custom = "validate_audiences")]
     pub audiences: Vec<Audience>,
 
+    pub frequency_constraint: Option<String>,
+
+    #[validate]
+    #[validate(custom = "validate_variations")]
     pub variations: Option<Vec<Variation>>,
+
     pub data: Option<JsonValue>,
 
     #[serde(default = "default_sampler")]
@@ -100,20 +115,24 @@ impl Default for ExperimentKind {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Validate)]
 #[serde(tag = "kind")]
 pub struct Audience {
+    #[validate(length(min = 1))]
     pub name: String,
 
     #[serde(flatten)]
     pub audience: AudienceSpec,
 
+    pub script_src: Option<String>,
+
     #[serde(flatten)]
+    #[validate(custom = "validate_size_spec")]
     pub size: SizeSpec,
 
     #[serde(default)]
     #[serde(skip)]
-    pub picked_size: AtomicU64,
+    pub picked_size: AtomicI64,
 }
 
 impl PartialEq for Audience {
@@ -125,7 +144,7 @@ impl PartialEq for Audience {
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(tag = "audience_kind")]
 pub enum AudienceSpec {
-    Script { script_src: Option<String> },
+    Script,
     List { list_id: String },
 }
 
@@ -134,12 +153,31 @@ pub enum AudienceSpec {
 pub enum SizeSpec {
     Absolute {
         #[serde(alias = "size_value")]
-        value: u64,
+        value: i64,
     },
     Percent {
         #[serde(alias = "size_value")]
-        value: u32,
+        value: i64,
     },
+}
+
+fn validate_size_spec(size_spec: &SizeSpec) -> Result<(), ValidationError> {
+    match size_spec {
+        SizeSpec::Absolute { value } => {
+            if 0.ge(value) {
+                return Err(ValidationError::new("invalid absolute size value"));
+            }
+        }
+        SizeSpec::Percent { value } => {
+            if 0.ge(value) || 100.lt(value) {
+                return Err(ValidationError::new(
+                    "invalid percent size value - should be min=1 and max=100",
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn default_sampler() -> rand::distributions::Uniform<u64> {
@@ -156,31 +194,27 @@ impl AbOptimisationService {
     ) -> anyhow::Result<http::Response<Body>> {
         let mut req_data = HttpRequest::value::<Experiment>(route, body).await?;
 
-        // TODO: validate same name and short name doesn't exist
-        // TODO: validate short name can be max 5 chars
-        // TODO: validate experiment data
-
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
             let project = entry.value().read();
 
+            self.validate_experiment_data(&project, &req_data, None, guard)?;
+
             let id = nanoid!();
 
             req_data.id = id.to_string();
+            req_data.version = 1; // start with version # 1
             self.write_experiment_data(app_id, project_id, &req_data)?;
 
-            project.experiments.insert(id, RwLock::new(req_data), guard);
+            project
+                .experiments
+                .insert(id.to_string(), RwLock::new(req_data), guard);
 
-            HttpResponse::str(route, "SUCCESS")
+            HttpResponse::binary_or_json(route, &AddResponse { id })
         };
 
-        let x = self.visit_project(app_id, project_id, guard, visitor);
-
-        match x {
-            Ok(result) => result,
-            Err(err) => err.into(),
-        }
+        self.visit_project(app_id, project_id, guard, visitor)
     }
 
     pub async fn update_experiment(
@@ -193,69 +227,78 @@ impl AbOptimisationService {
     ) -> anyhow::Result<http::Response<Body>> {
         let req_data = HttpRequest::value::<Experiment>(route, body).await?;
 
-        // TODO: validate same name and short name doesn't exist
-        // TODO: validate short name can be max 5 chars
-        // TODO: validate experiment data
-
         let guard = &epoch::pin();
+
+        let validation_visitor =
+            |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
+                let project = entry.value().read();
+
+                self.validate_experiment_data(&project, &req_data, Some(experiment_id), guard)
+            };
+
+        self.visit_project(app_id, project_id, guard, validation_visitor)?;
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>| {
             let mut existing_data = entry.value().write();
 
-            // TODO: identify what got changed
-
-            // (
-            //     &self.id,
-            //     &self.name,
-            //     &self.short_name,
-            //     &self.version,
-            //     &self.kind,
-            //     &self.inactive,
-            //     &self.start_time,
-            //     &self.end_time,
-            //     &self.audiences,
-            //     &self.variations,
-            //     &self.data,
-            // )
-
+            let mut changed = false;
             if existing_data.name != req_data.name {
-                existing_data.name = req_data.name
+                existing_data.name = req_data.name;
+                changed = true;
             }
 
             if existing_data.short_name != req_data.short_name {
-                existing_data.short_name = req_data.short_name
-            }
-
-            if existing_data.version != req_data.version {
-                existing_data.version = req_data.version
+                existing_data.short_name = req_data.short_name;
+                changed = true;
             }
 
             if existing_data.kind != req_data.kind {
-                existing_data.kind = req_data.kind
+                existing_data.kind = req_data.kind;
+                changed = true;
             }
 
             if existing_data.inactive != req_data.inactive {
-                existing_data.inactive = req_data.inactive
+                existing_data.inactive = req_data.inactive;
+                changed = true;
             }
 
             if existing_data.start_time != req_data.start_time {
-                existing_data.start_time = req_data.start_time
+                existing_data.start_time = req_data.start_time;
+                changed = true;
             }
 
             if existing_data.end_time != req_data.end_time {
-                existing_data.end_time = req_data.end_time
+                existing_data.end_time = req_data.end_time;
+                changed = true;
             }
 
             if existing_data.audiences != req_data.audiences {
-                existing_data.audiences = req_data.audiences
+                existing_data.audiences = req_data.audiences;
+                changed = true;
             }
 
             if existing_data.variations != req_data.variations {
-                existing_data.variations = req_data.variations
+                existing_data.variations = req_data.variations;
+                changed = true;
             }
 
             if existing_data.data != req_data.data {
-                existing_data.data = req_data.data
+                existing_data.data = req_data.data;
+                changed = true;
+            }
+
+            // version change can be because of
+            //      - change in audience spec or size
+            //      - change in variations or size
+            // if audience spec changed -- user may not be anymore part of the eligible set.
+            // if audience size increased -- it is fine to keep user
+            // if audience size decreased -- we may need to re-evaluate user's eligibility
+            // if change in variations -- experiment is kept, but user may need to be assigned to different variant
+            // if variant size increased -- experiment is kept, variation is kept
+            // if variant size decreased -- experiment is kept, reassign variant
+            if changed {
+                // increment the version #
+                existing_data.version += 1;
             }
 
             self.write_experiment_data(app_id, project_id, &existing_data)?;
@@ -263,12 +306,60 @@ impl AbOptimisationService {
             HttpResponse::str(route, "SUCCESS")
         };
 
-        let x = self.visit_experiment(app_id, project_id, experiment_id, guard, visitor);
+        self.visit_experiment(app_id, project_id, experiment_id, guard, visitor)
+    }
 
-        match x {
-            Ok(result) => result,
-            Err(err) => err.into(),
+    fn validate_experiment_data(
+        &self,
+        project: &Project,
+        data_to_validate: &Experiment,
+        update_id: Option<&str>,
+        guard: &Guard,
+    ) -> anyhow::Result<()> {
+        data_to_validate
+            .validate()
+            .with_context(|| format!("Error in validating experiment data"))?;
+
+        if let Some(variations) = data_to_validate.variations.as_ref() {
+            if variations.len() > 0 && data_to_validate.kind == ExperimentKind::Feature {
+                return Err(anyhow!(
+                    "For experiment of kind=Feature no variations are allowed"
+                ));
+            }
         }
+
+        if data_to_validate.version > 0 {
+            return Err(anyhow!(
+                "Version # is automatically calculated and is not allowed"
+            ));
+        }
+
+        for entry in project.experiments.iter(guard) {
+            let value = entry.value();
+            let experiment = value.read();
+
+            if let Some(update_id) = update_id {
+                if experiment.id.eq(update_id) {
+                    continue;
+                }
+            }
+
+            if experiment.short_name.eq(&data_to_validate.short_name) {
+                return Err(anyhow!(
+                    "Experiment with same short_name={} already exists",
+                    experiment.short_name
+                ));
+            }
+
+            if experiment.name.eq(&data_to_validate.name) {
+                return Err(anyhow!(
+                    "Experiment with same name={} already exists",
+                    experiment.name
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn get_experiment(
@@ -287,12 +378,7 @@ impl AbOptimisationService {
             HttpResponse::binary_or_json(route, pojo)
         };
 
-        let x = self.visit_experiment(app_id, project_id, experiment_id, guard, visitor);
-
-        match x {
-            Ok(result) => result,
-            Err(err) => err.into(),
-        }
+        self.visit_experiment(app_id, project_id, experiment_id, guard, visitor)
     }
 
     pub async fn list_experiments(
@@ -312,12 +398,7 @@ impl AbOptimisationService {
             HttpResponse::binary_or_json(route, &wrapper)
         };
 
-        let x = self.visit_project(app_id, project_id, guard, visitor);
-
-        match x {
-            Ok(result) => result,
-            Err(err) => err.into(),
-        }
+        self.visit_project(app_id, project_id, guard, visitor)
     }
 
     pub fn visit_experiment<'g, F, R>(
@@ -327,9 +408,9 @@ impl AbOptimisationService {
         experiment_id: &str,
         guard: &'g Guard,
         visitor: F,
-    ) -> Result<R, HttpError>
+    ) -> anyhow::Result<R>
     where
-        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>) -> R,
+        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>) -> anyhow::Result<R>,
     {
         let proj_visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
             let project_guard = entry.value().read();
@@ -337,20 +418,18 @@ impl AbOptimisationService {
             match experiment_entry {
                 None => {
                     // insert here
-                    Err(HttpError::NotFound(format!(
+                    Err(anyhow!(
                         "Experiment not found for id: {}, project id: {} and app id: {}",
-                        experiment_id, project_id, app_id
-                    )))
+                        experiment_id,
+                        project_id,
+                        app_id
+                    ))
                 }
-                Some(experiment_entry) => Ok(visitor(experiment_entry)),
+                Some(experiment_entry) => visitor(experiment_entry),
             }
         };
 
-        let x = self.visit_project(app_id, project_id, guard, proj_visitor);
-        match x {
-            Ok(result) => result,
-            Err(err) => Err(err),
-        }
+        self.visit_project(app_id, project_id, guard, proj_visitor)
     }
 }
 
@@ -427,4 +506,47 @@ from packaging.version import parse as parse_version
 
         Ok(())
     }
+}
+
+fn validate_variations(variations: &Vec<Variation>) -> Result<(), ValidationError> {
+    // check for unique variations by name
+    if !variations
+        .iter()
+        .map(|variation| &variation.name)
+        .all_unique()
+    {
+        return Err(ValidationError::new("Duplicate variation name found"));
+    }
+
+    // check for unique variations by short_name
+    if !variations
+        .iter()
+        .map(|variation| &variation.short_name)
+        .all_unique()
+    {
+        return Err(ValidationError::new("Duplicate variation short_name found"));
+    }
+
+    // check variation size adds upto 100
+    if variations
+        .iter()
+        .map(|variation| variation.size)
+        .sum::<u64>()
+        != 100
+    {
+        return Err(ValidationError::new(
+            "All variations total size should sum to 100",
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_audiences(audiences: &Vec<Audience>) -> Result<(), ValidationError> {
+    // check for unique variations by name
+    if !audiences.iter().map(|audience| &audience.name).all_unique() {
+        return Err(ValidationError::new("Duplicate audience name found"));
+    }
+
+    Ok(())
 }

@@ -3,9 +3,14 @@ other_chars = { "." | "." | "_" }
 ident = { (ASCII_ALPHANUMERIC | other_chars)+ }
 
 short_name = @{ ident }
-version = @{ (ASCII_DIGIT)+ }
-member_kind = @{ "C" | "T" }
-variation = @{ ident | "" }
+selected_version = @{ (ASCII_DIGIT)+ }
+selected_member_kind = @{ "C" | "T" }
+selected_variation = @{ ident | "" }
+selection_date = @{ (ASCII_DIGIT)+ }
+total_selection_count = @{ (ASCII_DIGIT)+ }
+invocation_version = @{ (ASCII_DIGIT)+ }
+invocation_date = @{ (ASCII_DIGIT)+ }
+total_invocation_count = @{ (ASCII_DIGIT)+ }
 
-experiment = { short_name ~ "|" ~ version ~ "|" ~ member_kind ~ "|" ~ variation }
+experiment = { short_name ~ "|" ~ selected_version ~ "|" ~ selected_member_kind ~ "|" ~ selected_variation~ "|" ~ selection_date ~ "|" ~ total_selection_count ~ "|" ~ invocation_version ~ "|" ~ invocation_date ~ "|" ~ total_invocation_count }
 cookie = { experiment ~ ("~" ~ experiment)* }

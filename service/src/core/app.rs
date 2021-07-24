@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use anyhow::{anyhow, Context};
 use crossbeam_epoch as epoch;
 use crossbeam_skiplist::SkipList;
 use epoch::Guard;
@@ -7,18 +8,23 @@ use hyper::Body;
 use nanoid::nanoid;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
-use crate::core::skiplist_serde;
-use crate::server::{HttpError, HttpRequest, HttpResponse, HttpRoute};
+use crate::core::{skiplist_serde, AddResponse};
+use crate::server::{HttpRequest, HttpResponse, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::project::Project;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Validate)]
 pub struct App {
     #[serde(skip_deserializing)]
     pub id: String,
+
+    #[validate(length(min = 1))]
     pub name: String,
+
+    #[validate(length(min = 1, max = 5))]
     pub short_name: String,
 
     // todo: pub auth_key: String,
@@ -33,6 +39,28 @@ fn default_projects() -> SkipList<String, RwLock<Project>> {
 }
 
 impl AbOptimisationService {
+    pub async fn add_app(
+        &self,
+        route: &HttpRoute<'_>,
+        body: Body,
+    ) -> anyhow::Result<http::Response<Body>> {
+        let mut req_data = HttpRequest::value::<App>(route, body).await?;
+
+        let guard = &epoch::pin();
+
+        // validate app data
+        self.validate_app_data(&req_data, None, guard)?;
+
+        let id = nanoid!();
+        req_data.id = id.to_string();
+        self.write_app_data(&req_data)?;
+
+        self.apps
+            .insert(id.to_string(), RwLock::new(req_data), guard);
+
+        HttpResponse::binary_or_json(route, &AddResponse { id })
+    }
+
     pub async fn update_app(
         &self,
         route: &HttpRoute<'_>,
@@ -43,7 +71,10 @@ impl AbOptimisationService {
 
         let guard = &epoch::pin();
 
-        match self.visit_app(
+        // validate app data
+        self.validate_app_data(&req, Some(app_id), guard)?;
+
+        self.visit_app(
             app_id,
             guard,
             |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
@@ -61,28 +92,42 @@ impl AbOptimisationService {
 
                 HttpResponse::str(route, "SUCCESS")
             },
-        ) {
-            Ok(result) => result,
-            Err(err) => err.into(),
-        }
+        )
     }
 
-    pub async fn add_app(
+    fn validate_app_data(
         &self,
-        route: &HttpRoute<'_>,
-        body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
-        let mut req_data = HttpRequest::value::<App>(route, body).await?;
+        data_to_validate: &App,
+        update_id: Option<&str>,
+        guard: &Guard,
+    ) -> anyhow::Result<()> {
+        data_to_validate
+            .validate()
+            .with_context(|| format!("Error in validating app data"))?;
 
-        let guard = &epoch::pin();
+        for entry in self.apps.iter(guard) {
+            let value = entry.value();
+            let app = value.read();
 
-        let id = nanoid!();
-        req_data.id = id.to_string();
-        self.write_app_data(&req_data)?;
+            if let Some(update_id) = update_id {
+                if app.id.eq(update_id) {
+                    continue;
+                }
+            }
 
-        self.apps.insert(id, RwLock::new(req_data), guard);
+            if app.short_name.eq(&data_to_validate.short_name) {
+                return Err(anyhow!(
+                    "App with same short_name={} already exists",
+                    app.short_name
+                ));
+            }
 
-        HttpResponse::str(route, "SUCCESS")
+            if app.name.eq(&data_to_validate.name) {
+                return Err(anyhow!("App with same name={} already exists", app.name));
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn get_app(
@@ -92,7 +137,7 @@ impl AbOptimisationService {
     ) -> anyhow::Result<http::Response<Body>> {
         let guard = &epoch::pin();
 
-        match self.visit_app(
+        self.visit_app(
             app_id,
             guard,
             |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
@@ -102,10 +147,7 @@ impl AbOptimisationService {
 
                 HttpResponse::binary_or_json(route, app)
             },
-        ) {
-            Ok(result) => result,
-            Err(err) => err.into(),
-        }
+        )
     }
 
     pub async fn list_apps(&self, route: &HttpRoute<'_>) -> anyhow::Result<http::Response<Body>> {
@@ -119,20 +161,17 @@ impl AbOptimisationService {
         app_id: &str,
         guard: &'g Guard,
         visitor: F,
-    ) -> Result<R, HttpError>
+    ) -> anyhow::Result<R>
     where
-        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<App>>) -> R,
+        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<App>>) -> anyhow::Result<R>,
     {
         let entry = self.apps.get(app_id, guard);
         match entry {
             None => {
                 // insert here
-                Err(HttpError::NotFound(format!(
-                    "No app found for id: {}",
-                    app_id
-                )))
+                Err(anyhow!("No app found for id: {}", app_id))
             }
-            Some(entry) => Ok(visitor(entry)),
+            Some(entry) => visitor(entry),
         }
     }
 }

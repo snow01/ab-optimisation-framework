@@ -57,6 +57,8 @@ nanoid = "0.4.0"
 regex = "1.5.4"
 fasthash = "0.4.0"
 
+validator = { version = "0.14.0", features = ["derive"] }
+
 [dependencies.pyo3]
 version = "0.14.1"
 features = ["auto-initialize", "macros"]
