@@ -1,1 +1,0 @@
-{"id":"mnNu9P-36Wal6DJhgdE4V","name":"cronet","short_name":"crnt","version":0,"kind":"Experiment","inactive":false,"start_time":null,"end_time":null,"audiences":[{"kind":"Audience","name":"new_users","audience_kind":"Script","script_src":"ctx['app_version'] >= '4.7.3'","size_kind":"Percent","value":20}],"variations":null,"data":null}

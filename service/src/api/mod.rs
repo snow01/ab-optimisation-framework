@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use http::Response;
 use hyper::Body;
 
-use crate::server::{HttpResponse, HttpRoute, Service};
+use crate::server::{ApiError, HttpResponse, HttpRoute, Service};
 use crate::service::AbOptimisationService;
 
 mod common;
@@ -16,7 +16,7 @@ impl Service for AbOptimisationService {
         body: Body,
         route: &HttpRoute<'a>,
         path: &[&str],
-    ) -> anyhow::Result<Response<Body>> {
+    ) -> Result<Response<Body>, ApiError> {
         match path {
             // sub routes
             ["run"] if matches!(route.method, &http::Method::POST) => self.run(route, body).await,

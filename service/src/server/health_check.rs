@@ -1,20 +1,22 @@
 use std::sync::atomic::Ordering;
 
-use http::{Method, Response};
+use http::Method;
 use hyper::Body;
+
+use crate::server::HttpResult;
 
 use super::service::IN_ROTATION;
 use super::HttpResponse;
 use super::HttpRoute;
 
-fn switch_oor_status(route: &HttpRoute<'_>) -> anyhow::Result<Response<Body>> {
+fn switch_oor_status(route: &HttpRoute<'_>) -> HttpResult {
     let current_value = IN_ROTATION.load(Ordering::Relaxed);
     IN_ROTATION.store(!current_value, Ordering::Relaxed);
     // HttpResponse::json(&!current_value, None)
     get_in_rotation_status(route)
 }
 
-pub fn get_in_rotation_status(route: &HttpRoute<'_>) -> anyhow::Result<Response<Body>> {
+pub fn get_in_rotation_status(route: &HttpRoute<'_>) -> HttpResult {
     let in_rotation = IN_ROTATION.load(Ordering::Relaxed);
     if in_rotation {
         const OK: &str = "OK";
@@ -29,7 +31,7 @@ pub fn get_in_rotation_status(route: &HttpRoute<'_>) -> anyhow::Result<Response<
 
 const API_PATH: &str = "oor";
 
-pub fn oor_handler(route: &HttpRoute<'_>) -> anyhow::Result<Response<Body>> {
+pub fn oor_handler(route: &HttpRoute<'_>) -> HttpResult {
     // route.metric_path = Some(API_PATH);
 
     let method = route.method;

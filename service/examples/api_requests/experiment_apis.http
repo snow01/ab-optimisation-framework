@@ -92,12 +92,13 @@ Content-Type: application/json
   "inactive": false,
   "start_time": null,
   "end_time": null,
+  "frequency_constraint": "experiment.get('total_selection_count', 0) == 0",
   "audiences": [
     {
       "kind": "Audience",
       "name": "new_users",
       "audience_kind": "Script",
-      "script_src": "ctx['new_user'] == False and ctx['app_version'] >= '4.7.3' and (not ctx['relaunch_onboarding_flow'])",
+      "script_src": "not ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3' and not ctx.get('relaunch_onboarding_flow', False)",
       "size_kind": "Percent",
       "value": 5
     }
@@ -122,11 +123,11 @@ Content-Type: application/json
 {
   "name": "relaunch",
   "short_name": "rlnch",
-  "version": 2,
   "kind": "Experiment",
   "inactive": false,
   "start_time": null,
   "end_time": null,
+  "frequency_constraint": "experiment.get('total_selection_count', 0) == 0",
   "audiences": [
     {
       "kind": "Audience",

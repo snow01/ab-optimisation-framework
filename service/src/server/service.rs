@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use http::Response;
 use hyper::Body;
 
-use crate::server::HttpRoute;
+use crate::server::{ApiError, HttpRoute};
 
 lazy_static! {
     pub static ref IN_ROTATION: AtomicBool = AtomicBool::new(true);
@@ -21,5 +21,5 @@ pub trait Service: Send + Sync {
         body: Body,
         route: &HttpRoute<'a>,
         path: &[&str],
-    ) -> anyhow::Result<Response<Body>>;
+    ) -> Result<Response<Body>, ApiError>;
 }

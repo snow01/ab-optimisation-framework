@@ -12,7 +12,7 @@ use validator::Validate;
 
 use crate::core::audience_list::AudienceList;
 use crate::core::{skiplist_serde, AddResponse, App, HasId};
-use crate::server::{HttpRequest, HttpResponse, HttpRoute};
+use crate::server::{ApiError, ApiResult, HttpRequest, HttpResponse, HttpResult, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::experiment::Experiment;
@@ -68,12 +68,7 @@ fn default_tracking_method() -> TrackingMethod {
 }
 
 impl AbOptimisationService {
-    pub async fn add_project(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
+    pub async fn add_project(&self, route: &HttpRoute<'_>, app_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<Project>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -104,7 +99,7 @@ impl AbOptimisationService {
         app_id: &str,
         project_id: &str,
         body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let req_data = HttpRequest::value::<Project>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -143,7 +138,7 @@ impl AbOptimisationService {
         data_to_validate: &Project,
         update_id: Option<&str>,
         guard: &Guard,
-    ) -> anyhow::Result<()> {
+    ) -> ApiResult<()> {
         data_to_validate
             .validate()
             .with_context(|| format!("Error in validating project data"))?;
@@ -159,17 +154,17 @@ impl AbOptimisationService {
             }
 
             if proj.short_name.eq(&data_to_validate.short_name) {
-                return Err(anyhow!(
+                return Err(ApiError::BadRequest(anyhow!(
                     "Project with same short_name={} already exists",
                     app.short_name
-                ));
+                )));
             }
 
             if proj.name.eq(&data_to_validate.name) {
-                return Err(anyhow!(
+                return Err(ApiError::BadRequest(anyhow!(
                     "Project with same name={} already exists",
                     app.name
-                ));
+                )));
             }
         }
 
@@ -181,7 +176,7 @@ impl AbOptimisationService {
         route: &HttpRoute<'_>,
         app_id: &str,
         project_id: &str,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
@@ -194,11 +189,7 @@ impl AbOptimisationService {
         self.visit_project(app_id, project_id, guard, visitor)
     }
 
-    pub async fn list_projects(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-    ) -> anyhow::Result<http::Response<Body>> {
+    pub async fn list_projects(&self, route: &HttpRoute<'_>, app_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
@@ -218,9 +209,9 @@ impl AbOptimisationService {
         project_id: &str,
         guard: &'g Guard,
         visitor: F,
-    ) -> anyhow::Result<R>
+    ) -> ApiResult<R>
     where
-        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Project>>) -> anyhow::Result<R>,
+        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Project>>) -> ApiResult<R>,
     {
         let app_visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
             let app_lock = entry.value();
@@ -229,11 +220,10 @@ impl AbOptimisationService {
             match proj_entry {
                 None => {
                     // insert here
-                    Err(anyhow!(
+                    Err(ApiError::NotFound(format!(
                         "Project not found for project id: {} and app id: {}",
-                        project_id,
-                        app_id
-                    ))
+                        project_id, app_id
+                    )))
                 }
                 Some(proj_entry) => visitor(proj_entry),
             }

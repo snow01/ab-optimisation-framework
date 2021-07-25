@@ -22,7 +22,7 @@ use crate::api::common::merge_data;
 use crate::api::experiment_tracking_data::{TrackedExperiment, TrackingData, TrackingDataParser};
 use crate::core;
 use crate::core::{Project, TrackingMethod};
-use crate::server::{HttpError, HttpRequest, HttpResponse, HttpRoute};
+use crate::server::{ApiError, HttpRequest, HttpResponse, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::common::ExperimentMemberKind;
@@ -36,7 +36,12 @@ pub struct ExperimentRequest {
     pub tracking_data: Option<String>,
 
     #[serde(skip)]
-    experiment_start_time: i64,
+    #[serde(default = "current_time")]
+    experiment_start_time: chrono::DateTime<chrono::Local>,
+}
+
+fn current_time() -> chrono::DateTime<chrono::Local> {
+    chrono::Local::now()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,14 +68,14 @@ impl AbOptimisationService {
         result_visitor: F,
     ) -> R
     where
-        F: FnOnce(Result<ExperimentResponse, HttpError>) -> R,
+        F: FnOnce(Result<ExperimentResponse, ApiError>) -> R,
     {
         let guard = &epoch::pin();
 
         // check app
         let app_entry = self.apps.get(&req.app_id, guard);
         match app_entry {
-            None => result_visitor(Err(HttpError::NotFound(format!(
+            None => result_visitor(Err(ApiError::NotFound(format!(
                 "App:{} not found",
                 req.app_id
             )))),
@@ -80,7 +85,7 @@ impl AbOptimisationService {
 
                 let proj_entry = app.projects.get(&req.project_id, guard);
                 match proj_entry {
-                    None => result_visitor(Err(HttpError::NotFound(format!(
+                    None => result_visitor(Err(ApiError::NotFound(format!(
                         "Project:{} not found",
                         req.project_id
                     )))),
@@ -103,7 +108,7 @@ impl AbOptimisationService {
         app: &'a core::App,
         proj: &'a core::Project,
         guard: &'a Guard,
-    ) -> Result<ExperimentResponse<'a>, HttpError> {
+    ) -> Result<ExperimentResponse<'a>, ApiError> {
         let tracking_cookie_name = Self::tracking_cookie_name(&app, &proj);
 
         // get tracking history
@@ -112,6 +117,8 @@ impl AbOptimisationService {
 
         // build map from tracking history to the version
         let tracking_history = Self::build_tracking_history_map(tracking_history);
+
+        info!("Tracking History: {:#?}", tracking_history);
 
         // LATER: parse cookie / header / context into final context object - not needed immediately...
 
@@ -138,6 +145,11 @@ impl AbOptimisationService {
                 existing_experiment,
                 guard,
             )?;
+
+            info!(
+                "Experiment={}@{} targeting_eligible={}, frequency_eligible={}, picked={}",
+                experiment.id, experiment.name, targeting_eligible, frequency_eligible, picked
+            );
 
             if !targeting_eligible {
                 // identify if experiment was in tracking history... copy as it is
@@ -403,7 +415,6 @@ impl AbOptimisationService {
         let frequency_eligible;
         match (experiment.frequency_constraint.as_ref(), tracked_experiment) {
             (Some(frequency_constraint), Some(tracked_experiment)) => {
-                // TODO: build context for frequency constraint
                 frequency_eligible = AbOptimisationService::evaluate_frequency_constraint(
                     tracked_experiment,
                     req.context.as_ref(),
@@ -456,10 +467,10 @@ impl AbOptimisationService {
                 }
             }
 
-            let mut matches_list = false;
+            let mut matches_list = true;
             if let core::AudienceSpec::List { list_id: id } = audience {
                 let audience_entry = proj.audience_lists.get(id, guard).ok_or_else(|| {
-                    HttpError::BadRequest(anyhow!("Audience Spec not found for id: {}", id))
+                    ApiError::BadRequest(anyhow!("Audience Spec not found for id: {}", id))
                 })?;
 
                 let audience_list = audience_entry.value();
@@ -531,7 +542,7 @@ impl AbOptimisationService {
             let globals = [("fns", fns)].into_py_dict(py);
 
             let result = py
-                .eval(script_src, Some(&globals), Some(&locals))
+                .eval(script_src, Some(globals), Some(locals))
                 .with_context(|| format!("Error in evaluating script"))?;
 
             result
@@ -569,6 +580,52 @@ impl AbOptimisationService {
             r#"
 from packaging.version import parse as parse_version
 from datetime import date,time,datetime,timedelta
+
+def app_version(ctx):
+    return parse_version(ctx.get('app_version', '0.0.0'))
+
+def lt_version(ctx, version):
+    return app_version(ctx) < parse_version(version)
+    
+def le_version(ctx, version):
+    return app_version(ctx) <= parse_version(version)
+    
+def gt_version(ctx, version):
+    return app_version(ctx) > parse_version(version)
+    
+def ge_version(ctx, version):
+    return app_version(ctx) >= parse_version(version)
+    
+def eq_version(ctx, version):
+    return app_version(ctx) == parse_version(version)
+    
+def ne_version(ctx, version):
+    return app_version(ctx) != parse_version(version)                    
+    
+def allow_only_once(experiment):
+    return experiment is None or experiment.get('total_selection_count', 0) == 0
+
+def allow_max_x_times(experiment, times):
+    return experiment is None or experiment.get('total_selection_count', 0) < times
+
+def allow_every_x_times(experiment, times):
+    return experiment is None or experiment.get('total_invocation_count', 0) % times == 0
+    
+def invocation_date(experiment):
+    return datetime.fromisoformat(experiment.get('invocation_date'))
+    
+def selection_date(experiment):
+    return datetime.fromisoformat(experiment.get('selection_date'))     
+    
+def allow_once_per_x_period(experiment, weeks=0, days=0, hours=0, minutes=0, seconds=0):
+    if experiment is None or 'selection_date' not in experiment:
+        return false
+    
+    selection_time = selection_date(experiment)
+    current_time = datetime.now(tz=selection_time.tzinfo)
+    diff = current_time - selection_time
+    
+    return diff >= timedelta(weeks=weeks,days=days,hours=hours,minutes=minutes,seconds=seconds)            
                 "#,
             "fns.py",
             "fns",
@@ -617,46 +674,41 @@ impl AbOptimisationService {
         &'a self,
         route: &HttpRoute<'a>,
         body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
-        let mut req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
+    ) -> Result<http::Response<Body>, ApiError> {
+        let req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
 
-        req.experiment_start_time = chrono::Utc::now().timestamp();
+        let process_result = |result: Result<ExperimentResponse, ApiError>| {
+            result.and_then(|experiment_response| {
+                HttpResponse::binary_or_json(route, &experiment_response).and_then(
+                    |mut response| {
+                        // TODO: depends on whether we are doing cookie tracking
+                        if let Some(tracking_cookie_name) =
+                            experiment_response.tracking_cookie_name.as_ref()
+                        {
+                            let cookie_value = match experiment_response.tracking_data.as_ref() {
+                                None => "",
+                                Some(tracking_data) => tracking_data,
+                            };
 
-        let process_result = |result: Result<ExperimentResponse, HttpError>| {
-            match result {
-                Ok(experiment_response) => {
-                    HttpResponse::binary_or_json(route, &experiment_response).and_then(
-                        |mut response| {
-                            // TODO: depends on whether we are doing cookie tracking
-                            if let Some(tracking_cookie_name) =
-                                experiment_response.tracking_cookie_name.as_ref()
-                            {
-                                let cookie_value = match experiment_response.tracking_data.as_ref()
-                                {
-                                    None => "",
-                                    Some(tracking_data) => tracking_data,
-                                };
+                            let cookie = cookie::Cookie::build(tracking_cookie_name, cookie_value)
+                                .path("/")
+                                .permanent()
+                                // .secure(true) // TODO: depends on installation setting
+                                .http_only(true)
+                                .finish();
 
-                                let cookie =
-                                    cookie::Cookie::build(tracking_cookie_name, cookie_value)
-                                        .path("/")
-                                        .permanent()
-                                        // .secure(true) // TODO: depends on installation setting
-                                        .http_only(true)
-                                        .finish();
+                            response.headers_mut().append(
+                                SET_COOKIE,
+                                HeaderValue::from_str(&cookie.to_string()).with_context(|| {
+                                    format!("Error in building header value for cookie")
+                                })?,
+                            );
+                        }
 
-                                response.headers_mut().append(
-                                    SET_COOKIE,
-                                    HeaderValue::from_str(&cookie.to_string())?,
-                                );
-                            }
-
-                            Ok(response)
-                        },
-                    )
-                }
-                Err(error) => error.into(),
-            }
+                        Ok(response)
+                    },
+                )
+            })
         };
 
         self.run_internal(route, &req, process_result)

@@ -1,7 +1,7 @@
 use anyhow::Context;
 use crossbeam_epoch as epoch;
 use crossbeam_skiplist::SkipList;
-use http::{header, HeaderValue, Response};
+use http::{header, HeaderValue};
 use hyper::Body;
 use log::{info, log_enabled, Level};
 use metered::{measure, HitCount};
@@ -10,7 +10,7 @@ use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Serialize, Serializer};
 
 use crate::server::access_logger::metrics::CounterIncrementer;
-use crate::server::{HttpResponse, HttpRoute};
+use crate::server::{HttpResponse, HttpResult, HttpRoute};
 
 use super::metrics::ErrorCounter;
 use super::response_time::ResponseTime;
@@ -32,7 +32,7 @@ impl AccessLogger {
         }
     }
 
-    pub fn log_access(&self, route: &HttpRoute<'_>, response: &anyhow::Result<Response<Body>>) {
+    pub fn log_access(&self, route: &HttpRoute<'_>, response: &HttpResult) {
         let elapsed_time = route.req_instant.elapsed();
 
         if log_enabled!(target: "access_log", Level::Info) {
@@ -111,26 +111,32 @@ impl AccessLogger {
     }
 
     // labels: code, method, path ==> hits, errors, response time
-    pub async fn get_api_metrics_for_prometheus(
-        &self,
-        route: &HttpRoute<'_>,
-    ) -> anyhow::Result<Response<Body>> {
+    pub async fn get_api_metrics_for_prometheus(&self, route: &HttpRoute<'_>) -> HttpResult {
         let registry = Registry::new();
 
         // register 3 counters vector... hits, errors, quantiles... label being ["path", "method", "code"]
         let labels = vec!["path", "method", "code"];
         let hits_counter_opts = Opts::new("hits", "hits counter");
-        let hits_counter = prometheus::CounterVec::new(hits_counter_opts, &labels)?;
-        registry.register(Box::new(hits_counter.clone()))?;
+        let hits_counter = prometheus::CounterVec::new(hits_counter_opts, &labels)
+            .with_context(|| format!("Error in building hits counter"))?;
+        registry
+            .register(Box::new(hits_counter.clone()))
+            .with_context(|| format!("Error in registering hits counter"))?;
 
         let errors_counter_opts = Opts::new("errors", "errors counter");
-        let errors_counter = prometheus::CounterVec::new(errors_counter_opts, &labels)?;
-        registry.register(Box::new(errors_counter.clone()))?;
+        let errors_counter = prometheus::CounterVec::new(errors_counter_opts, &labels)
+            .with_context(|| format!("Error in building errors counter"))?;
+        registry
+            .register(Box::new(errors_counter.clone()))
+            .with_context(|| format!("Error in registering errors counter"))?;
 
         let quantile_counter_opts = Opts::new("quantiles", "quantiles counter");
         let labels = vec!["path", "method", "code", "quantile"];
-        let quantiles_counter = prometheus::CounterVec::new(quantile_counter_opts, &labels)?;
-        registry.register(Box::new(quantiles_counter.clone()))?;
+        let quantiles_counter = prometheus::CounterVec::new(quantile_counter_opts, &labels)
+            .with_context(|| format!("Error in building quantiles counter"))?;
+        registry
+            .register(Box::new(quantiles_counter.clone()))
+            .with_context(|| format!("Error in registering quantiles counter"))?;
 
         // iterate over registry and serialize
         let guard = &epoch::pin();
@@ -164,10 +170,7 @@ impl AccessLogger {
         HttpResponse::ok(route, Body::from(buffer))
     }
 
-    pub async fn get_api_metrics_as_json(
-        &self,
-        route: &HttpRoute<'_>,
-    ) -> anyhow::Result<Response<Body>> {
+    pub async fn get_api_metrics_as_json(&self, route: &HttpRoute<'_>) -> HttpResult {
         HttpResponse::json(route, &self.registry)
     }
 }

@@ -57,7 +57,7 @@ where
     let clap = clap::App::from_yaml(yaml).version(crate_version!());
     let matches = clap.get_matches();
 
-    let postgres_address: &str = &value_t!(matches, "postgres", String).unwrap();
+    // let _postgres_address: &str = &value_t!(matches, "postgres", String).unwrap();
     let log4rs_prop_file: &str = &value_t!(matches, "log4rs_prop_file", String).unwrap();
     let config_dir: &str = &value_t!(matches, "config_dir", String).unwrap();
     let env: &str = &value_t!(matches, "env", String).unwrap();

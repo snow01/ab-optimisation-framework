@@ -13,7 +13,7 @@ use serde_json::Value as JsonValue;
 use validator::{Validate, ValidationError};
 
 use crate::core::{skiplist_serde, AddResponse, HasId, Project};
-use crate::server::{HttpRequest, HttpResponse, HttpRoute};
+use crate::server::{ApiError, ApiResult, HttpRequest, HttpResponse, HttpResult, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::variation::Variation;
@@ -191,7 +191,7 @@ impl AbOptimisationService {
         app_id: &str,
         project_id: &str,
         body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let mut req_data = HttpRequest::value::<Experiment>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -224,7 +224,7 @@ impl AbOptimisationService {
         project_id: &str,
         experiment_id: &str,
         body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let req_data = HttpRequest::value::<Experiment>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -282,6 +282,11 @@ impl AbOptimisationService {
                 changed = true;
             }
 
+            if existing_data.frequency_constraint != req_data.frequency_constraint {
+                existing_data.frequency_constraint = req_data.frequency_constraint;
+                changed = true;
+            }
+
             if existing_data.data != req_data.data {
                 existing_data.data = req_data.data;
                 changed = true;
@@ -315,23 +320,23 @@ impl AbOptimisationService {
         data_to_validate: &Experiment,
         update_id: Option<&str>,
         guard: &Guard,
-    ) -> anyhow::Result<()> {
+    ) -> ApiResult<()> {
         data_to_validate
             .validate()
             .with_context(|| format!("Error in validating experiment data"))?;
 
         if let Some(variations) = data_to_validate.variations.as_ref() {
             if variations.len() > 0 && data_to_validate.kind == ExperimentKind::Feature {
-                return Err(anyhow!(
+                return Err(ApiError::BadRequest(anyhow!(
                     "For experiment of kind=Feature no variations are allowed"
-                ));
+                )));
             }
         }
 
         if data_to_validate.version > 0 {
-            return Err(anyhow!(
+            return Err(ApiError::BadRequest(anyhow!(
                 "Version # is automatically calculated and is not allowed"
-            ));
+            )));
         }
 
         for entry in project.experiments.iter(guard) {
@@ -345,17 +350,17 @@ impl AbOptimisationService {
             }
 
             if experiment.short_name.eq(&data_to_validate.short_name) {
-                return Err(anyhow!(
+                return Err(ApiError::BadRequest(anyhow!(
                     "Experiment with same short_name={} already exists",
                     experiment.short_name
-                ));
+                )));
             }
 
             if experiment.name.eq(&data_to_validate.name) {
-                return Err(anyhow!(
+                return Err(ApiError::BadRequest(anyhow!(
                     "Experiment with same name={} already exists",
                     experiment.name
-                ));
+                )));
             }
         }
 
@@ -368,7 +373,7 @@ impl AbOptimisationService {
         app_id: &str,
         project_id: &str,
         experiment_id: &str,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>| {
@@ -386,7 +391,7 @@ impl AbOptimisationService {
         route: &HttpRoute<'_>,
         app_id: &str,
         project_id: &str,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
@@ -408,9 +413,9 @@ impl AbOptimisationService {
         experiment_id: &str,
         guard: &'g Guard,
         visitor: F,
-    ) -> anyhow::Result<R>
+    ) -> ApiResult<R>
     where
-        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>) -> anyhow::Result<R>,
+        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>) -> ApiResult<R>,
     {
         let proj_visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
             let project_guard = entry.value().read();
@@ -418,93 +423,16 @@ impl AbOptimisationService {
             match experiment_entry {
                 None => {
                     // insert here
-                    Err(anyhow!(
+                    Err(ApiError::NotFound(format!(
                         "Experiment not found for id: {}, project id: {} and app id: {}",
-                        experiment_id,
-                        project_id,
-                        app_id
-                    ))
+                        experiment_id, project_id, app_id
+                    )))
                 }
                 Some(experiment_entry) => visitor(experiment_entry),
             }
         };
 
         self.visit_project(app_id, project_id, guard, proj_visitor)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Instant;
-
-    // use anyhow::anyhow;
-    // use anyhow::Context;
-    use pyo3::prelude::*;
-    use pyo3::types::IntoPyDict;
-    use pythonize::pythonize;
-    use serde_json::json;
-
-    // use pyo3::types::IntoPyDict;
-
-    #[test]
-    fn test_pyo3() -> anyhow::Result<()> {
-        for _i in 0..10 {
-            let instance = Instant::now();
-
-            Python::with_gil(|py| -> anyhow::Result<bool> {
-                let ctx = Some(json!({
-                    "new_user": true,
-                    "app_version": "4.8.3",
-                }));
-
-                let ctx = pythonize(py, &ctx)?;
-
-                let locals = [("ctx", ctx)].into_py_dict(py);
-
-                // let sys = PyModule::import(py, "sys")?;
-                let fns = PyModule::from_code(
-                    py,
-                    r#"
-from packaging.version import parse as parse_version
-                "#,
-                    "fns.py",
-                    "fns",
-                )?;
-                let globals = [("fns", fns)].into_py_dict(py);
-
-                let result = py.eval(
-                    // "sys.version",
-                    "fns.parse_version(ctx['app_version'])",
-                    // "ctx['new_user'] == False and ctx['app_version'] >= '4.7.3'",
-                    Some(&globals),
-                    Some(&locals),
-                )?;
-
-                println!("Result: {:?}", result);
-                println!("Total time taken: {:?}", instance.elapsed());
-
-                // match result {
-                //     Ok(result) => {
-                //         // let res: bool = result.extract().unwrap();
-                //
-                //         println!("Result: {:?}", result);
-                //         println!("Total time taken: {:?}", instance.elapsed());
-                //     }
-                //     Err(err) => {
-                //         println!("Error in executing python function: {}", err)
-                //     }
-                // }
-                // .map_err(|err| Err(anyhow!("Error in evaluating expression: {}", err)))?;
-                // .with_context(|| format!("Error in evaluating expression"))?;
-                // .map_err(|e| {
-                //     e.print_and_set_sys_last_vars(py);
-                // })?;
-
-                Ok(true)
-            })?;
-        }
-
-        Ok(())
     }
 }
 

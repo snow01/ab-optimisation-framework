@@ -1,16 +1,17 @@
-use std::fmt;
 use std::fmt::{Display, Formatter};
 
 use anyhow::{bail, Context};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use pest::Parser;
-use serde::de::{self as serde_de, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::api::common::ExperimentMemberKind;
+use chrono::TimeZone;
 
-static FIRST_JULY_2021: i64 = 1625097600;
+lazy_static! {
+    static ref FIRST_JULY_2021: i64 = chrono::Local.ymd(2021, 7, 1).and_hms(0, 0, 0).timestamp();
+}
 
 #[derive(Parser)]
 #[grammar = "api/tracking_cookie_parser.pest"]
@@ -21,16 +22,16 @@ pub struct TrackingData {
     pub experiments: Vec<TrackedExperiment>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrackedExperiment {
     pub short_name: String,
     pub selected_version: i64,
     pub selected_member_kind: ExperimentMemberKind,
     pub selected_variation: Option<String>,
-    pub selection_date: i64,
+    pub selection_date: chrono::DateTime<chrono::Local>,
     pub total_selection_count: u64,
     pub invocation_version: i64,
-    pub invocation_date: i64,
+    pub invocation_date: chrono::DateTime<chrono::Local>,
     pub total_invocation_count: u64,
 }
 
@@ -59,63 +60,63 @@ impl Display for TrackedExperiment {
             self.selected_version,
             self.selected_member_kind,
             self.selected_variation.as_ref().map_or_else(|| "", |v| v),
-            self.selection_date - FIRST_JULY_2021,
+            self.selection_date.timestamp() - *FIRST_JULY_2021,
             self.total_selection_count,
             self.invocation_version,
-            self.invocation_date - self.selection_date,
+            self.invocation_date.timestamp() - self.selection_date.timestamp(),
             self.total_invocation_count
         )
     }
 }
 
-impl Serialize for TrackedExperiment {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for TrackedExperiment {
-    fn deserialize<D>(deserializer: D) -> Result<TrackedExperiment, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct ValueVisitor;
-
-        impl<'de> Visitor<'de> for ValueVisitor {
-            type Value = TrackedExperiment;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("any valid JSON value")
-            }
-
-            #[inline]
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                self.visit_string(String::from(value))
-            }
-
-            #[inline]
-            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-            where
-                E: serde_de::Error,
-            {
-                TrackingDataParser::parse_experiment(&value).map_err(|e| {
-                    serde_de::Error::custom(format!(
-                        "Error in deserializing string {} ==> {:?}",
-                        value, e
-                    ))
-                })
-            }
-        }
-
-        deserializer.deserialize_any(ValueVisitor)
-    }
-}
+// impl Serialize for TrackedExperiment {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         serializer.serialize_str(&self.to_string())
+//     }
+// }
+//
+// impl<'de> Deserialize<'de> for TrackedExperiment {
+//     fn deserialize<D>(deserializer: D) -> Result<TrackedExperiment, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         struct ValueVisitor;
+//
+//         impl<'de> Visitor<'de> for ValueVisitor {
+//             type Value = TrackedExperiment;
+//
+//             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+//                 formatter.write_str("any valid JSON value")
+//             }
+//
+//             #[inline]
+//             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+//             where
+//                 E: serde::de::Error,
+//             {
+//                 self.visit_string(String::from(value))
+//             }
+//
+//             #[inline]
+//             fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+//             where
+//                 E: serde_de::Error,
+//             {
+//                 TrackingDataParser::parse_experiment(&value).map_err(|e| {
+//                     serde_de::Error::custom(format!(
+//                         "Error in deserializing string {} ==> {:?}",
+//                         value, e
+//                     ))
+//                 })
+//             }
+//         }
+//
+//         deserializer.deserialize_any(ValueVisitor)
+//     }
+// }
 
 impl TrackingDataParser {
     pub fn parse_tracking_data_no_err(value: &str) -> TrackingData {
@@ -205,12 +206,15 @@ impl TrackingDataParser {
                 }
 
                 Rule::selected_variation => {
-                    selected_variation = Some(inner.as_str().to_string());
+                    let variation = inner.as_str();
+                    if !variation.is_empty() {
+                        selected_variation = Some(variation.to_string());
+                    }
                 }
 
                 Rule::selection_date => {
                     // add first create_date
-                    selection_date = inner.as_str().parse::<i64>()? + FIRST_JULY_2021;
+                    selection_date = inner.as_str().parse::<i64>()? + *FIRST_JULY_2021;
                 }
 
                 Rule::total_selection_count => {
@@ -242,10 +246,10 @@ impl TrackingDataParser {
             selected_version,
             selected_member_kind,
             selected_variation,
-            selection_date,
+            selection_date: chrono::Local.timestamp(selection_date, 0),
             total_selection_count,
             invocation_version,
-            invocation_date,
+            invocation_date: chrono::Local.timestamp(invocation_date, 0),
             total_invocation_count,
         })
     }

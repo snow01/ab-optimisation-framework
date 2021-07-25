@@ -1,13 +1,11 @@
-use http::Response;
-use hyper::Body;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use thiserror::Error;
 
-use crate::server::HttpResponse;
+use crate::server::{HttpResponse, HttpResult};
 
 #[derive(Error, Debug)]
-pub enum HttpError {
+pub enum ApiError {
     #[error("Internal Server Error: {0}")]
     InternalServerError(anyhow::Error),
 
@@ -24,14 +22,14 @@ pub enum HttpError {
     NoContent(String),
 }
 
-impl Into<anyhow::Result<http::Response<Body>>> for HttpError {
-    fn into(self) -> anyhow::Result<Response<Body>> {
+impl Into<HttpResult> for ApiError {
+    fn into(self) -> HttpResult {
         match self {
-            HttpError::InternalServerError(error) => HttpResponse::internal_server_error(error),
-            HttpError::NotFound(reason) => HttpResponse::not_found(&reason),
-            HttpError::Forbidden(reason) => HttpResponse::forbidden(&reason),
-            HttpError::BadRequest(error) => HttpResponse::bad_request(error),
-            HttpError::NoContent(reason) => HttpResponse::no_content(&reason),
+            ApiError::InternalServerError(error) => HttpResponse::internal_server_error(error),
+            ApiError::NotFound(reason) => HttpResponse::not_found(&reason),
+            ApiError::Forbidden(reason) => HttpResponse::forbidden(&reason),
+            ApiError::BadRequest(error) => HttpResponse::bad_request(error),
+            ApiError::NoContent(reason) => HttpResponse::no_content(&reason),
         }
     }
 }

@@ -4,14 +4,14 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Context;
-use http::{HeaderValue, Method, Request, Response};
+use http::{HeaderValue, Method, Request};
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Body;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use crate::server::{Service, ServiceBuilder};
+use crate::server::{HttpResult, Service, ServiceBuilder};
 
 use super::access_logger::ACCESS_LOGGER;
 use super::health_check::{get_in_rotation_status, oor_handler};
@@ -19,7 +19,7 @@ use super::http_response::HttpResponse;
 // use super::ACCESS_LOGGER;
 use super::HttpRoute;
 
-fn index(route: &HttpRoute<'_>) -> anyhow::Result<Response<Body>> {
+fn index(route: &HttpRoute<'_>) -> HttpResult {
     let body = Body::from("Hello!");
     HttpResponse::ok(route, body)
 }
@@ -40,7 +40,7 @@ async fn route_handler<App>(
     mut req: Request<Body>,
     remote_addr: std::net::SocketAddr,
     app: Arc<App>,
-) -> anyhow::Result<Response<Body>>
+) -> HttpResult
 where
     App: 'static + Service,
 {
@@ -85,13 +85,14 @@ where
     let response = match response {
         Ok(mut response) => {
             let time_taken = format!("{}", humantime::Duration::from(req_instant.elapsed()));
-            let time_taken_header = HeaderValue::from_str(&time_taken)?;
+            let time_taken_header = HeaderValue::from_str(&time_taken)
+                .with_context(|| format!("Error in building header value time_taken"))?;
             response
                 .headers_mut()
                 .append("X-time-taken", time_taken_header);
             Ok(response)
         }
-        Err(err) => HttpResponse::internal_server_error(err),
+        Err(err) => err.into(),
     };
 
     // log & metrics

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::core::{skiplist_serde, AddResponse, HasId, Project};
-use crate::server::{HttpRequest, HttpResponse, HttpRoute};
+use crate::server::{ApiError, ApiResult, HttpRequest, HttpResponse, HttpResult, HttpRoute};
 use crate::service::AbOptimisationService;
 
 #[derive(Serialize, Deserialize, Validate)]
@@ -38,7 +38,7 @@ impl AbOptimisationService {
         app_id: &str,
         project_id: &str,
         body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let mut req_data = HttpRequest::value::<AudienceList>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -69,7 +69,7 @@ impl AbOptimisationService {
         project_id: &str,
         list_id: &str,
         body: Body,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let req_data = HttpRequest::value::<AudienceList>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -106,7 +106,7 @@ impl AbOptimisationService {
         data_to_validate: &AudienceList,
         update_id: Option<&str>,
         guard: &Guard,
-    ) -> anyhow::Result<()> {
+    ) -> ApiResult<()> {
         data_to_validate
             .validate()
             .with_context(|| format!("Error in validating audience list data"))?;
@@ -122,10 +122,10 @@ impl AbOptimisationService {
             }
 
             if experiment.name.eq(&data_to_validate.name) {
-                return Err(anyhow!(
+                return Err(ApiError::BadRequest(anyhow!(
                     "Audience List with same name={} already exists",
                     experiment.name
-                ));
+                )));
             }
         }
 
@@ -138,7 +138,7 @@ impl AbOptimisationService {
         app_id: &str,
         project_id: &str,
         list_id: &str,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<AudienceList>>| {
@@ -156,7 +156,7 @@ impl AbOptimisationService {
         route: &HttpRoute<'_>,
         app_id: &str,
         project_id: &str,
-    ) -> anyhow::Result<http::Response<Body>> {
+    ) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
@@ -178,27 +178,24 @@ impl AbOptimisationService {
         list_id: &str,
         guard: &'g Guard,
         visitor: F,
-    ) -> anyhow::Result<R>
+    ) -> ApiResult<R>
     where
-        F: FnOnce(
-            crossbeam_skiplist::base::Entry<String, RwLock<AudienceList>>,
-        ) -> anyhow::Result<R>,
+        F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<AudienceList>>) -> ApiResult<R>,
     {
-        let proj_visitor =
-            |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
-                let project_guard = entry.value().read();
-                let audience_list_entry = project_guard.audience_lists.get(list_id, guard);
-                match audience_list_entry {
-                    None => {
-                        // insert here
-                        Err(anyhow!(
+        let proj_visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
+            let project_guard = entry.value().read();
+            let audience_list_entry = project_guard.audience_lists.get(list_id, guard);
+            match audience_list_entry {
+                None => {
+                    // insert here
+                    Err(ApiError::NotFound(format!(
                         "Audience List not found for list id: {}, project id: {} and app id: {}",
                         list_id, project_id, app_id
-                    ))
-                    }
-                    Some(audience_list_entry) => visitor(audience_list_entry),
+                    )))
                 }
-            };
+                Some(audience_list_entry) => visitor(audience_list_entry),
+            }
+        };
 
         self.visit_project(app_id, project_id, guard, proj_visitor)
     }
