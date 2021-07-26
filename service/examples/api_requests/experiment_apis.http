@@ -60,7 +60,7 @@ Content-Type: application/json
   "inactive": false,
   "start_time": null,
   "end_time": null,
-  "frequency_constraint": "fns.allow_only_once(experiment)",
+  "frequency_constraint": "fns.allow_every_x_times(experiment, 2)",
   "audiences": [
     {
       "kind": "Audience",

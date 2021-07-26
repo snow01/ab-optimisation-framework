@@ -56,7 +56,7 @@ impl HasId for Project {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub enum TrackingMethod {
     Both,
     Cookie,
