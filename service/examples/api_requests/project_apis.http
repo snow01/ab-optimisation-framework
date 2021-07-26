@@ -34,7 +34,7 @@ GET http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti
 Accept: application/json
 
 ### get specific project
-GET http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti/android
+GET http://{{host}}/api/projects/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
 Accept: application/json
 
 ### update existing project

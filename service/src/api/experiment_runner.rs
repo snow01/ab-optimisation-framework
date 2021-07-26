@@ -429,6 +429,8 @@ impl AbOptimisationService {
                         experiment.short_name
                     )
                 })?;
+
+                info!("Frequency eligible: {}", frequency_eligible);
             }
             _ => {
                 frequency_eligible = true;
@@ -537,6 +539,8 @@ impl AbOptimisationService {
                 .with_context(|| format!("Error in converting context into python object"))?;
             let locals = [("ctx", python_ctx), ("experiment", python_experiment)].into_py_dict(py);
 
+            info!("Locals for frequency constraint: {:?}", locals);
+
             let fns = AbOptimisationService::build_common_script_module(py)?;
 
             let globals = [("fns", fns)].into_py_dict(py);
@@ -544,6 +548,8 @@ impl AbOptimisationService {
             let result = py
                 .eval(script_src, Some(globals), Some(locals))
                 .with_context(|| format!("Error in evaluating script"))?;
+
+            info!("Result for frequency constraint: {:?}", result);
 
             result
                 .extract()

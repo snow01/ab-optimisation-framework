@@ -44,7 +44,7 @@ mod tests {
                 // invocation_version: 0
                 total_selection_count: 3,
                 invocation_date: chrono::Local::now().sub(chrono::Duration::days(15)),
-                total_invocation_count: 5,
+                total_invocation_count: 4,
             };
 
             let tracked_experiment = pythonize(py, &tracked_experiment)?;
@@ -118,14 +118,14 @@ def allow_once_per_x_period(experiment, weeks=0, days=0, hours=0, minutes=0, sec
 
             println!("Result: {:#?}", result);
 
-            // let result = py.eval(
-            //     // "fns.datetime.fromisoformat(experiment.get('selection_date'))",
-            //     "fns.allow_once_per_x_period(experiment, days=3)",
-            //     Some(globals),
-            //     Some(locals),
-            // );
-            //
-            // println!("Result: {:#?}", result);
+            let result = py.eval(
+                // "fns.datetime.fromisoformat(experiment.get('selection_date'))",
+                "fns.allow_every_x_times(experiment, 2)",
+                Some(globals),
+                Some(locals),
+            );
+
+            println!("Result: {:#?}", result);
 
             // println!("Total time taken: {:?}", instance.elapsed());
 
