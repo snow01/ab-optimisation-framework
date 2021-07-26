@@ -116,7 +116,6 @@ impl Default for ExperimentKind {
 }
 
 #[derive(Serialize, Deserialize, Validate)]
-#[serde(tag = "kind")]
 pub struct Audience {
     #[validate(length(min = 1))]
     pub name: String,
