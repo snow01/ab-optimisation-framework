@@ -1,5 +1,9 @@
 # FOR Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
 
+### View an experiment
+GET http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF/nL4sYPJP1BLBMvnON9tHG
+Accept: application/json
+
 ### list of experiments
 GET http://{{host}}/api/experiments/Ok-cUE-XSGUqyRWiqwKti/V1NauWW7Qs73MR5J6X0ZF
 Accept: application/json
@@ -52,11 +56,11 @@ Content-Type: application/json
 {
   "name": "onboarding",
   "short_name": "onb",
-  "version": 2,
   "kind": "Experiment",
   "inactive": false,
   "start_time": null,
   "end_time": null,
+  "frequency_constraint": "fns.allow_only_once(experiment)",
   "audiences": [
     {
       "kind": "Audience",
@@ -127,7 +131,7 @@ Content-Type: application/json
   "inactive": false,
   "start_time": null,
   "end_time": null,
-  "frequency_constraint": "experiment.get('total_selection_count', 0) == 0",
+  "frequency_constraint": "fns.allow_only_once(experiment)",
   "audiences": [
     {
       "kind": "Audience",

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 pub use app::App;
 pub use audience_list::AudienceList;
 pub use experiment::Audience;
-pub use experiment::AudienceSpec;
 pub use experiment::Experiment;
 pub use experiment::SizeSpec;
 pub use project::Project;

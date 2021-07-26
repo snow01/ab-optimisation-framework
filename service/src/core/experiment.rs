@@ -121,10 +121,9 @@ pub struct Audience {
     #[validate(length(min = 1))]
     pub name: String,
 
-    #[serde(flatten)]
-    pub audience: AudienceSpec,
-
     pub script_src: Option<String>,
+
+    pub list_id: Option<String>,
 
     #[serde(flatten)]
     #[validate(custom = "validate_size_spec")]
@@ -137,15 +136,9 @@ pub struct Audience {
 
 impl PartialEq for Audience {
     fn eq(&self, other: &Self) -> bool {
-        (&self.name, &self.audience, &self.size) == (&other.name, &other.audience, &other.size)
+        (&self.name, &self.script_src, &self.list_id, &self.size)
+            == (&other.name, &other.script_src, &self.list_id, &other.size)
     }
-}
-
-#[derive(Serialize, Deserialize, Eq, PartialEq)]
-#[serde(tag = "audience_kind")]
-pub enum AudienceSpec {
-    Script,
-    List { list_id: String },
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]

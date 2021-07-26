@@ -437,7 +437,7 @@ impl AbOptimisationService {
 
         for core::Audience {
             name,
-            audience,
+            list_id,
             size,
             picked_size,
             script_src,
@@ -468,9 +468,9 @@ impl AbOptimisationService {
             }
 
             let mut matches_list = true;
-            if let core::AudienceSpec::List { list_id: id } = audience {
-                let audience_entry = proj.audience_lists.get(id, guard).ok_or_else(|| {
-                    ApiError::BadRequest(anyhow!("Audience Spec not found for id: {}", id))
+            if let Some(list_id) = list_id {
+                let audience_entry = proj.audience_lists.get(list_id, guard).ok_or_else(|| {
+                    ApiError::BadRequest(anyhow!("Audience list not found for id: {}", list_id))
                 })?;
 
                 let audience_list = audience_entry.value();

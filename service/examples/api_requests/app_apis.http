@@ -7,7 +7,6 @@ POST http://{{host}}/api/apps/app1
 Content-Type: application/json
 
 {
-  "id": "app1",
   "name": "Josh App",
   "short_name": "josh"
 }
@@ -21,3 +20,8 @@ Content-Type: application/json
   "short_name": "jstg"
 }
 
+
+
+### list of apps
+GET http://{{host}}/api/apps/app1
+Accept: application/json
