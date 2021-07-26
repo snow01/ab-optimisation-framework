@@ -124,6 +124,10 @@ impl AbOptimisationService {
                 existing_data.name = req_data.name
             }
 
+            if existing_data.tracking_method != req_data.tracking_method {
+                existing_data.tracking_method = req_data.tracking_method
+            }
+
             self.write_project_data(app_id, &existing_data)?;
 
             HttpResponse::str(route, "SUCCESS")
