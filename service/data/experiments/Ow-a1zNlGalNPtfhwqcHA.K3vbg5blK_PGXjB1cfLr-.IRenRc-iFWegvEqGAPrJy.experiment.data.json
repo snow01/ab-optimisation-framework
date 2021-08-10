@@ -1,0 +1,32 @@
+{
+  "id": "IRenRc-iFWegvEqGAPrJy",
+  "name": "NoScript-relaunch",
+  "short_name": "NSrl",
+  "version": 2,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "name": "nsc_rlnch_users",
+      "script_src": null,
+      "list_id": null,
+      "size_kind": "Percent",
+      "value": 100
+    }
+  ],
+  "frequency_constraint": null,
+  "variations": null,
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "p_b_i",
+      "p_p_i",
+      "i_s",
+      "f"
+    ]
+  }
+}

@@ -83,7 +83,7 @@ impl AbOptimisationService {
     }
 
     pub fn load_experiment(&self, file: &str, app_id: &str, project_id: &str, experiment_id: &str, mut experiment: Experiment) -> anyhow::Result<()> {
-        info!("Loading experiment fo app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
+        info!("Loading experiment for app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
 
         let guard = &epoch::pin();
         experiment.id = experiment_id.to_string();

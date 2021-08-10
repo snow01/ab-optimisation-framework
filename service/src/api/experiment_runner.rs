@@ -110,7 +110,7 @@ impl AbOptimisationService {
         // build map from tracking history to the version
         let tracking_history = Self::build_tracking_history_map(tracking_history);
 
-        info!("Tracking History: {:#?}", tracking_history);
+        // info!("Tracking History: {:#?}", tracking_history);
 
         // LATER: parse cookie / header / context into final context object - not needed immediately...
 
@@ -132,10 +132,10 @@ impl AbOptimisationService {
             // sample user for the experiment
             let (targeting_eligible, frequency_eligible, mut picked) = self.sample_experiment(&req, &proj, experiment.deref(), existing_experiment, guard)?;
 
-            info!(
-                "Experiment={}@{} targeting_eligible={}, frequency_eligible={}, picked={}",
-                experiment.id, experiment.name, targeting_eligible, frequency_eligible, picked
-            );
+            // info!(
+            //     "Experiment={}@{} targeting_eligible={}, frequency_eligible={}, picked={}",
+            //     experiment.id, experiment.name, targeting_eligible, frequency_eligible, picked
+            // );
 
             if !targeting_eligible {
                 // identify if experiment was in tracking history... copy as it is
@@ -397,7 +397,7 @@ impl AbOptimisationService {
                         )
                     })?;
 
-                info!("Frequency eligible: {}", frequency_eligible);
+                // info!("Frequency eligible: {}", frequency_eligible);
             }
             _ => {
                 frequency_eligible = true;

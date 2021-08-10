@@ -1,0 +1,32 @@
+{
+  "id": "kM_KtKLGmMe4U4oK5reay",
+  "name": "relaunch",
+  "short_name": "rlnch",
+  "version": 1,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "name": "new_users",
+      "script_src": "not ctx.get('new_user', False) and sem_version(ctx.get(app_version, '0.0.0')) >= '4.7.3'",
+      "list_id": null,
+      "size_kind": "Percent",
+      "value": 100
+    }
+  ],
+  "frequency_constraint": "experiment.get(total_invocation_count, 0) % 2 == 0",
+  "variations": null,
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "p_b_i",
+      "p_p_i",
+      "i_s",
+      "f"
+    ]
+  }
+}
