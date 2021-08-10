@@ -95,9 +95,7 @@ impl AccessLogger {
 
                 let api_metrics: &ApiMetrics = api_metrics_entry.value();
 
-                api_metrics
-                    .response_time
-                    .increment_time_by_duration(elapsed_time);
+                api_metrics.response_time.increment_time_by_duration(elapsed_time);
                 let hits = &api_metrics.hits;
                 measure!(hits, {});
 
@@ -117,23 +115,20 @@ impl AccessLogger {
         // register 3 counters vector... hits, errors, quantiles... label being ["path", "method", "code"]
         let labels = vec!["path", "method", "code"];
         let hits_counter_opts = Opts::new("hits", "hits counter");
-        let hits_counter = prometheus::CounterVec::new(hits_counter_opts, &labels)
-            .with_context(|| format!("Error in building hits counter"))?;
+        let hits_counter = prometheus::CounterVec::new(hits_counter_opts, &labels).with_context(|| format!("Error in building hits counter"))?;
         registry
             .register(Box::new(hits_counter.clone()))
             .with_context(|| format!("Error in registering hits counter"))?;
 
         let errors_counter_opts = Opts::new("errors", "errors counter");
-        let errors_counter = prometheus::CounterVec::new(errors_counter_opts, &labels)
-            .with_context(|| format!("Error in building errors counter"))?;
+        let errors_counter = prometheus::CounterVec::new(errors_counter_opts, &labels).with_context(|| format!("Error in building errors counter"))?;
         registry
             .register(Box::new(errors_counter.clone()))
             .with_context(|| format!("Error in registering errors counter"))?;
 
         let quantile_counter_opts = Opts::new("quantiles", "quantiles counter");
         let labels = vec!["path", "method", "code", "quantile"];
-        let quantiles_counter = prometheus::CounterVec::new(quantile_counter_opts, &labels)
-            .with_context(|| format!("Error in building quantiles counter"))?;
+        let quantiles_counter = prometheus::CounterVec::new(quantile_counter_opts, &labels).with_context(|| format!("Error in building quantiles counter"))?;
         registry
             .register(Box::new(quantiles_counter.clone()))
             .with_context(|| format!("Error in registering quantiles counter"))?;
@@ -163,9 +158,7 @@ impl AccessLogger {
         let metric_families = registry.gather();
         let mut buffer = vec![];
         let encoder = prometheus::TextEncoder::new();
-        encoder
-            .encode(&metric_families, &mut buffer)
-            .with_context(|| "Error in encoding prometheus")?;
+        encoder.encode(&metric_families, &mut buffer).with_context(|| "Error in encoding prometheus")?;
 
         HttpResponse::ok(route, Body::from(buffer))
     }
@@ -199,10 +192,7 @@ impl Serialize for ApiMetrics {
         map.serialize_entry("code", &self.code)?;
         map.serialize_entry("hit_count", &self.hits.0.get())?;
         map.serialize_entry("error_count", &self.errors.0.get())?;
-        map.serialize_entry(
-            "percentile_metrics",
-            &self.response_time.get_percentile_map().unwrap_or_default(),
-        )?;
+        map.serialize_entry("percentile_metrics", &self.response_time.get_percentile_map().unwrap_or_default())?;
         map.end()
     }
 }

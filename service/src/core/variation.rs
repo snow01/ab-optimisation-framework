@@ -24,7 +24,6 @@ pub struct Variation {
 
 impl PartialEq for Variation {
     fn eq(&self, other: &Self) -> bool {
-        (&self.name, &self.short_name, &self.size, &self.data)
-            == (&other.name, &other.short_name, &other.size, &other.data)
+        (&self.name, &self.short_name, &self.size, &self.data) == (&other.name, &other.short_name, &other.size, &other.data)
     }
 }

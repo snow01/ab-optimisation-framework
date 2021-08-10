@@ -28,19 +28,13 @@ async fn shutdown_signal() {
     // Wait for the CTRL+C signal
     debug!("Installing shutdown signal");
 
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to install CTRL+C signal handler");
+    tokio::signal::ctrl_c().await.expect("failed to install CTRL+C signal handler");
 
     warn!("Received shutdown signal");
 }
 
 // TODO: payload limit - json_payload_limit_conf()
-async fn route_handler<App>(
-    mut req: Request<Body>,
-    remote_addr: std::net::SocketAddr,
-    app: Arc<App>,
-) -> HttpResult
+async fn route_handler<App>(mut req: Request<Body>, remote_addr: std::net::SocketAddr, app: Arc<App>) -> HttpResult
 where
     App: 'static + Service,
 {
@@ -58,11 +52,7 @@ where
     //     body_buf = HttpRequest::body(&route, Body::empty()).await?;
     // }
 
-    let parts: Vec<_> = route
-        .path
-        .split("/")
-        .filter(|part| !part.is_empty())
-        .collect();
+    let parts: Vec<_> = route.path.split("/").filter(|part| !part.is_empty()).collect();
 
     let response = match &parts[..] {
         [] if matches!(route.method, &Method::GET) => index(&route),
@@ -85,11 +75,8 @@ where
     let response = match response {
         Ok(mut response) => {
             let time_taken = format!("{}", humantime::Duration::from(req_instant.elapsed()));
-            let time_taken_header = HeaderValue::from_str(&time_taken)
-                .with_context(|| format!("Error in building header value time_taken"))?;
-            response
-                .headers_mut()
-                .append("X-time-taken", time_taken_header);
+            let time_taken_header = HeaderValue::from_str(&time_taken).with_context(|| format!("Error in building header value time_taken"))?;
+            response.headers_mut().append("X-time-taken", time_taken_header);
             Ok(response)
         }
         Err(err) => err.into(),
@@ -101,10 +88,7 @@ where
     response
 }
 
-pub async fn start_http_server<App, AppBuilder>(
-    addr: &str,
-    app_builder: AppBuilder,
-) -> anyhow::Result<()>
+pub async fn start_http_server<App, AppBuilder>(addr: &str, app_builder: AppBuilder) -> anyhow::Result<()>
 where
     App: 'static + Service,
     AppBuilder: 'static + ServiceBuilder<App>,
@@ -115,9 +99,7 @@ where
         .parse::<SocketAddr>()
         .with_context(|| format!("Parsing node addr '{}' as SocketAddr", addr))?;
 
-    let app = app_builder
-        .build()
-        .with_context(|| "Error in building app")?;
+    let app = app_builder.build().with_context(|| "Error in building app")?;
 
     let app = Arc::new(app);
 

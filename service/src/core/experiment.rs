@@ -17,6 +17,7 @@ use crate::server::{ApiError, ApiResult, HttpRequest, HttpResponse, HttpResult, 
 use crate::service::AbOptimisationService;
 
 use super::variation::Variation;
+use crate::core::script::Script;
 
 #[derive(Serialize, Deserialize, Validate)]
 pub struct Experiment {
@@ -46,7 +47,7 @@ pub struct Experiment {
     #[validate(custom = "validate_audiences")]
     pub audiences: Vec<Audience>,
 
-    pub frequency_constraint: Option<String>,
+    pub frequency_constraint: Option<Script>,
 
     #[validate]
     #[validate(custom = "validate_variations")]
@@ -120,7 +121,7 @@ pub struct Audience {
     #[validate(length(min = 1))]
     pub name: String,
 
-    pub script_src: Option<String>,
+    pub script_src: Option<Script>,
 
     pub list_id: Option<String>,
 
@@ -135,8 +136,7 @@ pub struct Audience {
 
 impl PartialEq for Audience {
     fn eq(&self, other: &Self) -> bool {
-        (&self.name, &self.script_src, &self.list_id, &self.size)
-            == (&other.name, &other.script_src, &self.list_id, &other.size)
+        (&self.name, &self.script_src, &self.list_id, &self.size) == (&other.name, &other.script_src, &self.list_id, &other.size)
     }
 }
 
@@ -162,9 +162,7 @@ fn validate_size_spec(size_spec: &SizeSpec) -> Result<(), ValidationError> {
         }
         SizeSpec::Percent { value } => {
             if 0.ge(value) || 100.lt(value) {
-                return Err(ValidationError::new(
-                    "invalid percent size value - should be min=1 and max=100",
-                ));
+                return Err(ValidationError::new("invalid percent size value - should be min=1 and max=100"));
             }
         }
     }
@@ -177,13 +175,7 @@ fn default_sampler() -> rand::distributions::Uniform<u64> {
 }
 
 impl AbOptimisationService {
-    pub async fn add_experiment(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        body: Body,
-    ) -> HttpResult {
+    pub async fn add_experiment(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<Experiment>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -199,9 +191,7 @@ impl AbOptimisationService {
             req_data.version = 1; // start with version # 1
             self.write_experiment_data(app_id, project_id, &req_data)?;
 
-            project
-                .experiments
-                .insert(id.to_string(), RwLock::new(req_data), guard);
+            project.experiments.insert(id.to_string(), RwLock::new(req_data), guard);
 
             HttpResponse::binary_or_json(route, &AddResponse { id })
         };
@@ -209,24 +199,16 @@ impl AbOptimisationService {
         self.visit_project(app_id, project_id, guard, visitor)
     }
 
-    pub async fn update_experiment(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        experiment_id: &str,
-        body: Body,
-    ) -> HttpResult {
+    pub async fn update_experiment(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, experiment_id: &str, body: Body) -> HttpResult {
         let req_data = HttpRequest::value::<Experiment>(route, body).await?;
 
         let guard = &epoch::pin();
 
-        let validation_visitor =
-            |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
-                let project = entry.value().read();
+        let validation_visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
+            let project = entry.value().read();
 
-                self.validate_experiment_data(&project, &req_data, Some(experiment_id), guard)
-            };
+            self.validate_experiment_data(&project, &req_data, Some(experiment_id), guard)
+        };
 
         self.visit_project(app_id, project_id, guard, validation_visitor)?;
 
@@ -306,29 +288,17 @@ impl AbOptimisationService {
         self.visit_experiment(app_id, project_id, experiment_id, guard, visitor)
     }
 
-    fn validate_experiment_data(
-        &self,
-        project: &Project,
-        data_to_validate: &Experiment,
-        update_id: Option<&str>,
-        guard: &Guard,
-    ) -> ApiResult<()> {
-        data_to_validate
-            .validate()
-            .with_context(|| format!("Error in validating experiment data"))?;
+    fn validate_experiment_data(&self, project: &Project, data_to_validate: &Experiment, update_id: Option<&str>, guard: &Guard) -> ApiResult<()> {
+        data_to_validate.validate().with_context(|| format!("Error in validating experiment data"))?;
 
         if let Some(variations) = data_to_validate.variations.as_ref() {
             if variations.len() > 0 && data_to_validate.kind == ExperimentKind::Feature {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "For experiment of kind=Feature no variations are allowed"
-                )));
+                return Err(ApiError::BadRequest(anyhow!("For experiment of kind=Feature no variations are allowed")));
             }
         }
 
         if data_to_validate.version > 0 {
-            return Err(ApiError::BadRequest(anyhow!(
-                "Version # is automatically calculated and is not allowed"
-            )));
+            return Err(ApiError::BadRequest(anyhow!("Version # is automatically calculated and is not allowed")));
         }
 
         for entry in project.experiments.iter(guard) {
@@ -349,23 +319,14 @@ impl AbOptimisationService {
             }
 
             if experiment.name.eq(&data_to_validate.name) {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "Experiment with same name={} already exists",
-                    experiment.name
-                )));
+                return Err(ApiError::BadRequest(anyhow!("Experiment with same name={} already exists", experiment.name)));
             }
         }
 
         Ok(())
     }
 
-    pub async fn get_experiment(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        experiment_id: &str,
-    ) -> HttpResult {
+    pub async fn get_experiment(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, experiment_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>| {
@@ -378,12 +339,7 @@ impl AbOptimisationService {
         self.visit_experiment(app_id, project_id, experiment_id, guard, visitor)
     }
 
-    pub async fn list_experiments(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-    ) -> HttpResult {
+    pub async fn list_experiments(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
@@ -398,14 +354,7 @@ impl AbOptimisationService {
         self.visit_project(app_id, project_id, guard, visitor)
     }
 
-    pub fn visit_experiment<'g, F, R>(
-        &self,
-        app_id: &str,
-        project_id: &str,
-        experiment_id: &str,
-        guard: &'g Guard,
-        visitor: F,
-    ) -> ApiResult<R>
+    pub fn visit_experiment<'g, F, R>(&self, app_id: &str, project_id: &str, experiment_id: &str, guard: &'g Guard, visitor: F) -> ApiResult<R>
     where
         F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>) -> ApiResult<R>,
     {
@@ -430,33 +379,18 @@ impl AbOptimisationService {
 
 fn validate_variations(variations: &Vec<Variation>) -> Result<(), ValidationError> {
     // check for unique variations by name
-    if !variations
-        .iter()
-        .map(|variation| &variation.name)
-        .all_unique()
-    {
+    if !variations.iter().map(|variation| &variation.name).all_unique() {
         return Err(ValidationError::new("Duplicate variation name found"));
     }
 
     // check for unique variations by short_name
-    if !variations
-        .iter()
-        .map(|variation| &variation.short_name)
-        .all_unique()
-    {
+    if !variations.iter().map(|variation| &variation.short_name).all_unique() {
         return Err(ValidationError::new("Duplicate variation short_name found"));
     }
 
     // check variation size adds upto 100
-    if variations
-        .iter()
-        .map(|variation| variation.size)
-        .sum::<u64>()
-        != 100
-    {
-        return Err(ValidationError::new(
-            "All variations total size should sum to 100",
-        ));
+    if variations.iter().map(|variation| variation.size).sum::<u64>() != 100 {
+        return Err(ValidationError::new("All variations total size should sum to 100"));
     }
 
     Ok(())

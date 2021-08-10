@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Deref;
 use std::sync::atomic::Ordering;
 
@@ -10,10 +10,6 @@ use hyper::http::HeaderValue;
 use hyper::Body;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use pyo3::prelude::PyModule;
-use pyo3::types::IntoPyDict;
-use pyo3::Python;
-use pythonize::pythonize;
 use rand::distributions::Distribution;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -21,7 +17,7 @@ use serde_json::Value as JsonValue;
 use crate::api::common::merge_data;
 use crate::api::experiment_tracking_data::{TrackedExperiment, TrackingData, TrackingDataParser};
 use crate::core;
-use crate::core::{Project, TrackingMethod};
+use crate::core::{Project, Script, TrackingMethod};
 use crate::server::{ApiError, HttpRequest, HttpResponse, HttpRoute};
 use crate::service::AbOptimisationService;
 
@@ -38,10 +34,18 @@ pub struct ExperimentRequest {
     #[serde(skip)]
     #[serde(default = "current_time")]
     experiment_start_time: chrono::DateTime<chrono::Local>,
+
+    #[serde(skip)]
+    #[serde(default = "default_context")]
+    script_context: jexl_eval::Value,
 }
 
 fn current_time() -> chrono::DateTime<chrono::Local> {
     chrono::Local::now()
+}
+
+fn default_context() -> jexl_eval::Value {
+    jexl_eval::Value::Null
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,12 +65,7 @@ pub struct ActiveExperiment {
 }
 
 impl AbOptimisationService {
-    fn run_internal<'a, F, R>(
-        &'a self,
-        route: &HttpRoute<'a>,
-        req: &'a ExperimentRequest,
-        result_visitor: F,
-    ) -> R
+    fn run_internal<'a, F, R>(&'a self, route: &HttpRoute<'a>, req: &'a ExperimentRequest, result_visitor: F) -> R
     where
         F: FnOnce(Result<ExperimentResponse, ApiError>) -> R,
     {
@@ -75,26 +74,19 @@ impl AbOptimisationService {
         // check app
         let app_entry = self.apps.get(&req.app_id, guard);
         match app_entry {
-            None => result_visitor(Err(ApiError::NotFound(format!(
-                "App:{} not found",
-                req.app_id
-            )))),
+            None => result_visitor(Err(ApiError::NotFound(format!("App:{} not found", req.app_id)))),
             Some(app_entry) => {
                 let app_lock = app_entry.value();
                 let app = app_lock.read();
 
                 let proj_entry = app.projects.get(&req.project_id, guard);
                 match proj_entry {
-                    None => result_visitor(Err(ApiError::NotFound(format!(
-                        "Project:{} not found",
-                        req.project_id
-                    )))),
+                    None => result_visitor(Err(ApiError::NotFound(format!("Project:{} not found", req.project_id)))),
                     Some(proj_entry) => {
                         let proj_lock = proj_entry.value();
                         let proj = proj_lock.read();
 
-                        let result =
-                            AbOptimisationService::run_for_project(route, &req, &app, &proj, guard);
+                        let result = self.run_for_project(route, &req, &app, &proj, guard);
                         result_visitor(result)
                     }
                 }
@@ -103,6 +95,7 @@ impl AbOptimisationService {
     }
 
     fn run_for_project<'a>(
+        &self,
         route: &HttpRoute<'_>,
         req: &'a ExperimentRequest,
         app: &'a core::App,
@@ -112,8 +105,7 @@ impl AbOptimisationService {
         let tracking_cookie_name = Self::tracking_cookie_name(&app, &proj);
 
         // get tracking history
-        let tracking_history =
-            Self::parse_tracking_history(route, req, &proj, &tracking_cookie_name)?;
+        let tracking_history = Self::parse_tracking_history(route, req, &proj, &tracking_cookie_name)?;
 
         // build map from tracking history to the version
         let tracking_history = Self::build_tracking_history_map(tracking_history);
@@ -138,13 +130,7 @@ impl AbOptimisationService {
             let existing_experiment = tracking_history.get(&experiment.short_name);
 
             // sample user for the experiment
-            let (targeting_eligible, frequency_eligible, mut picked) = Self::sample_experiment(
-                &req,
-                &proj,
-                experiment.deref(),
-                existing_experiment,
-                guard,
-            )?;
+            let (targeting_eligible, frequency_eligible, mut picked) = self.sample_experiment(&req, &proj, experiment.deref(), existing_experiment, guard)?;
 
             info!(
                 "Experiment={}@{} targeting_eligible={}, frequency_eligible={}, picked={}",
@@ -228,8 +214,7 @@ impl AbOptimisationService {
             let mut selected_variation = None;
             let selected_member_kind;
             if picked {
-                let (data, picked_variation) =
-                    AbOptimisationService::sample_variation(experiment.deref(), existing_variation);
+                let (data, picked_variation) = AbOptimisationService::sample_variation(experiment.deref(), existing_variation);
 
                 if let Some(picked_variation) = picked_variation.as_ref() {
                     selected_variation = Some(picked_variation.to_string())
@@ -278,9 +263,7 @@ impl AbOptimisationService {
         Ok(experiment_response)
     }
 
-    fn build_tracking_history_map(
-        tracking_history: Option<TrackingData>,
-    ) -> HashMap<String, TrackedExperiment> {
+    fn build_tracking_history_map(tracking_history: Option<TrackingData>) -> HashMap<String, TrackedExperiment> {
         match tracking_history {
             None => HashMap::new(),
             Some(tracking_history) => {
@@ -316,11 +299,7 @@ impl AbOptimisationService {
                 // first try with response...
                 if let Some(tracking_data) = req.tracking_data.as_ref() {
                     let tracking_data = TrackingDataParser::parse_tracking_data(tracking_data)
-                        .with_context(|| {
-                            format!(
-                                "Error in deserializing tracking_data in request to TrackingData"
-                            )
-                        })?;
+                        .with_context(|| format!("Error in deserializing tracking_data in request to TrackingData"))?;
 
                     Ok(Some(tracking_data))
                 } else {
@@ -336,11 +315,7 @@ impl AbOptimisationService {
                 // parse with response
                 if let Some(tracking_data) = req.tracking_data.as_ref() {
                     let tracking_data = TrackingDataParser::parse_tracking_data(tracking_data)
-                        .with_context(|| {
-                            format!(
-                                "Error in deserializing tracking_data in request to TrackingData"
-                            )
-                        })?;
+                        .with_context(|| format!("Error in deserializing tracking_data in request to TrackingData"))?;
 
                     Ok(Some(tracking_data))
                 } else {
@@ -350,10 +325,7 @@ impl AbOptimisationService {
         }
     }
 
-    fn sample_variation(
-        experiment: &core::Experiment,
-        existing_variation_name: Option<&String>,
-    ) -> (Option<serde_json::Value>, Option<String>) {
+    fn sample_variation(experiment: &core::Experiment, existing_variation_name: Option<&String>) -> (Option<serde_json::Value>, Option<String>) {
         let mut picked_variation: Option<String> = None;
 
         let mut data: Option<serde_json::Value> = experiment.data.clone();
@@ -382,10 +354,7 @@ impl AbOptimisationService {
                         }
                     }
                     Some(existing_variation_name) => {
-                        if let Some(variation) = variations
-                            .iter()
-                            .find(|variation| &variation.short_name == existing_variation_name)
-                        {
+                        if let Some(variation) = variations.iter().find(|variation| &variation.short_name == existing_variation_name) {
                             picked_variation = Some(variation.short_name.to_string());
 
                             data = merge_data(data, variation.data.clone());
@@ -399,6 +368,7 @@ impl AbOptimisationService {
     }
 
     fn sample_experiment(
+        &self,
         req: &ExperimentRequest,
         proj: &core::Project,
         experiment: &core::Experiment,
@@ -415,20 +385,17 @@ impl AbOptimisationService {
         let frequency_eligible;
         match (experiment.frequency_constraint.as_ref(), tracked_experiment) {
             (Some(frequency_constraint), Some(tracked_experiment)) => {
-                frequency_eligible = AbOptimisationService::evaluate_frequency_constraint(
-                    tracked_experiment,
-                    req.context.as_ref(),
-                    frequency_constraint,
-                )
-                .with_context(|| {
-                    format!(
-                        "frequency_constraint=\"{}\" tracked_experiment={:?} ctx={:?}, experiment={}",
-                        frequency_constraint,
-                        tracked_experiment,
-                        req.context.as_ref(),
-                        experiment.short_name
-                    )
-                })?;
+                frequency_eligible = self
+                    .evaluate_frequency_constraint(tracked_experiment, &req.script_context, Some(frequency_constraint))
+                    .with_context(|| {
+                        format!(
+                            "frequency_constraint=\"{}\" tracked_experiment={:?} ctx={:?}, experiment={}",
+                            frequency_constraint,
+                            tracked_experiment,
+                            req.context.as_ref(),
+                            experiment.short_name
+                        )
+                    })?;
 
                 info!("Frequency eligible: {}", frequency_eligible);
             }
@@ -446,34 +413,21 @@ impl AbOptimisationService {
             ..
         } in experiment.audiences.iter()
         {
-            let matches_script;
-            match script_src {
-                None => {
-                    // matches all
-                    matches_script = true;
-                }
-                Some(condition) => {
-                    // evaluate expression
-                    matches_script = AbOptimisationService::evaluate_audience_condition(
-                        req.context.as_ref(),
-                        condition,
-                    )
-                    .with_context(|| {
-                        format!(
-                            "script_src=\"{}\" ctx={:?}, experiment={}",
-                            condition,
-                            req.context.as_ref(),
-                            experiment.short_name
-                        )
-                    })?;
-                }
-            }
+            let matches_script = self.evaluate_audience_condition(&req.script_context, script_src.as_ref()).with_context(|| {
+                format!(
+                    "script_src=\"{:?}\" ctx={:?}, experiment={}",
+                    script_src,
+                    req.context.as_ref(),
+                    experiment.short_name
+                )
+            })?;
 
             let mut matches_list = true;
             if let Some(list_id) = list_id {
-                let audience_entry = proj.audience_lists.get(list_id, guard).ok_or_else(|| {
-                    ApiError::BadRequest(anyhow!("Audience list not found for id: {}", list_id))
-                })?;
+                let audience_entry = proj
+                    .audience_lists
+                    .get(list_id, guard)
+                    .ok_or_else(|| ApiError::BadRequest(anyhow!("Audience list not found for id: {}", list_id)))?;
 
                 let audience_list = audience_entry.value();
                 let audience_list = audience_list.read();
@@ -527,143 +481,41 @@ impl AbOptimisationService {
         Ok((targeting_eligible, frequency_eligible, picked))
     }
 
-    fn evaluate_frequency_constraint(
-        experiment: &TrackedExperiment,
-        ctx: Option<&JsonValue>,
-        script_src: &str,
-    ) -> anyhow::Result<bool> {
-        Python::with_gil(|py| -> anyhow::Result<bool> {
-            let python_ctx = pythonize(py, &ctx)
-                .with_context(|| format!("Error in converting context into python object"))?;
-            let python_experiment = pythonize(py, &experiment)
-                .with_context(|| format!("Error in converting context into python object"))?;
-            let locals = [("ctx", python_ctx), ("experiment", python_experiment)].into_py_dict(py);
+    fn evaluate_frequency_constraint(&self, experiment: &TrackedExperiment, ctx: &jexl_eval::Value, script: Option<&Script>) -> anyhow::Result<bool> {
+        if let jexl_eval::Value::Object(context_map) = ctx {
+            let mut context_map = context_map.clone();
+            let experiment = jexl_eval::to_value(experiment).with_context(|| format!("Error in converting experiment to EvaluationContext"))?;
+            context_map.insert("experiment".to_string(), experiment);
 
-            info!("Locals for frequency constraint: {:?}", locals);
+            let context = jexl_eval::Value::from(context_map);
 
-            let fns = AbOptimisationService::build_common_script_module(py)?;
-
-            let globals = [("fns", fns)].into_py_dict(py);
-
-            let result = py
-                .eval(script_src, Some(globals), Some(locals))
-                .with_context(|| format!("Error in evaluating script"))?;
-
-            info!("Result for frequency constraint: {:?}", result);
-
-            result
-                .extract()
-                .with_context(|| format!("Error in extracting boolean result"))
-        })
+            self.script_evaluator.evaluate(script, &context)
+        } else {
+            Err(anyhow::anyhow!("Context is not a valid Object"))
+        }
     }
 
-    fn evaluate_audience_condition(
-        ctx: Option<&JsonValue>,
-        script_src: &str,
-    ) -> anyhow::Result<bool> {
-        Python::with_gil(|py| -> anyhow::Result<bool> {
-            let python_ctx = pythonize(py, &ctx)
-                .with_context(|| format!("Error in converting context into python object"))?;
-            let locals = [("ctx", python_ctx)].into_py_dict(py);
-
-            let fns = AbOptimisationService::build_common_script_module(py)?;
-
-            let globals = [("fns", fns)].into_py_dict(py);
-
-            let result = py
-                .eval(script_src, Some(&globals), Some(&locals))
-                .with_context(|| format!("Error in evaluating script"))?;
-
-            result
-                .extract()
-                .with_context(|| format!("Error in extracting boolean result"))
-        })
-    }
-
-    fn build_common_script_module(py: Python) -> anyhow::Result<&PyModule> {
-        PyModule::from_code(
-            py,
-            r#"
-from packaging.version import parse as parse_version
-from datetime import date,time,datetime,timedelta
-
-def app_version(ctx):
-    return parse_version(ctx.get('app_version', '0.0.0'))
-
-def lt_version(ctx, version):
-    return app_version(ctx) < parse_version(version)
-    
-def le_version(ctx, version):
-    return app_version(ctx) <= parse_version(version)
-    
-def gt_version(ctx, version):
-    return app_version(ctx) > parse_version(version)
-    
-def ge_version(ctx, version):
-    return app_version(ctx) >= parse_version(version)
-    
-def eq_version(ctx, version):
-    return app_version(ctx) == parse_version(version)
-    
-def ne_version(ctx, version):
-    return app_version(ctx) != parse_version(version)                    
-    
-def allow_only_once(experiment):
-    return experiment is None or experiment.get('total_selection_count', 0) == 0
-
-def allow_max_x_times(experiment, times):
-    return experiment is None or experiment.get('total_selection_count', 0) < times
-
-def allow_every_x_times(experiment, times):
-    return experiment is None or experiment.get('total_invocation_count', 0) % times == 0
-    
-def invocation_date(experiment):
-    return datetime.fromisoformat(experiment.get('invocation_date'))
-    
-def selection_date(experiment):
-    return datetime.fromisoformat(experiment.get('selection_date'))     
-    
-def allow_once_per_x_period(experiment, weeks=0, days=0, hours=0, minutes=0, seconds=0):
-    if experiment is None or 'selection_date' not in experiment:
-        return false
-    
-    selection_time = selection_date(experiment)
-    current_time = datetime.now(tz=selection_time.tzinfo)
-    diff = current_time - selection_time
-    
-    return diff >= timedelta(weeks=weeks,days=days,hours=hours,minutes=minutes,seconds=seconds)            
-                "#,
-            "fns.py",
-            "fns",
-        )
-        .with_context(|| "Error in building common python modules")
+    fn evaluate_audience_condition(&self, ctx: &jexl_eval::Value, script: Option<&Script>) -> anyhow::Result<bool> {
+        self.script_evaluator.evaluate(script, ctx)
     }
 
     fn tracking_cookie_name(app: &core::App, proj: &core::Project) -> String {
         format!("X-abof-{}-{}", app.short_name, proj.short_name)
     }
 
-    fn parse_tracking_cookie(
-        route: &HttpRoute,
-        tracking_cookie_name: &String,
-    ) -> anyhow::Result<Option<TrackingData>> {
+    fn parse_tracking_cookie(route: &HttpRoute, tracking_cookie_name: &String) -> anyhow::Result<Option<TrackingData>> {
         match route.req.headers().get(hyper::header::COOKIE) {
             None => {}
             Some(cookie_header) => {
-                let cookie_header = cookie_header
-                    .to_str()
-                    .with_context(|| format!("Error in converting cookie header to string"))?;
+                let cookie_header = cookie_header.to_str().with_context(|| format!("Error in converting cookie header to string"))?;
 
                 for cookie_part in cookie_header.split(";") {
-                    let cookie = cookie::Cookie::parse(cookie_part)
-                        .with_context(|| format!("Error in parsing cookie"))?;
+                    let cookie = cookie::Cookie::parse(cookie_part).with_context(|| format!("Error in parsing cookie"))?;
 
                     if cookie.name() == tracking_cookie_name {
                         let cookie_value = cookie.value();
                         let tracking_data = TrackingDataParser::parse_tracking_data(cookie_value)
-                            .with_context(|| {
-                            format!("Error in deserializing tracking cookie to TrackingData")
-                        })?;
+                            .with_context(|| format!("Error in deserializing tracking cookie to TrackingData"))?;
 
                         return Ok(Some(tracking_data));
                     }
@@ -673,47 +525,43 @@ def allow_once_per_x_period(experiment, weeks=0, days=0, hours=0, minutes=0, sec
 
         Ok(None)
     }
-}
 
-impl AbOptimisationService {
-    pub async fn run<'a>(
-        &'a self,
-        route: &HttpRoute<'a>,
-        body: Body,
-    ) -> Result<http::Response<Body>, ApiError> {
-        let req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
+    pub async fn run<'a>(&'a self, route: &HttpRoute<'a>, body: Body) -> Result<http::Response<Body>, ApiError> {
+        let mut req = HttpRequest::value::<ExperimentRequest>(route, body).await?;
+
+        let mut context_map = BTreeMap::new();
+
+        if let Some(ref context) = req.context {
+            context_map.insert("ctx".to_string(), jexl_eval::Value::from(context));
+        };
+
+        req.script_context = jexl_eval::Value::from(context_map);
 
         let process_result = |result: Result<ExperimentResponse, ApiError>| {
             result.and_then(|experiment_response| {
-                HttpResponse::binary_or_json(route, &experiment_response).and_then(
-                    |mut response| {
-                        // TODO: depends on whether we are doing cookie tracking
-                        if let Some(tracking_cookie_name) =
-                            experiment_response.tracking_cookie_name.as_ref()
-                        {
-                            let cookie_value = match experiment_response.tracking_data.as_ref() {
-                                None => "",
-                                Some(tracking_data) => tracking_data,
-                            };
+                HttpResponse::binary_or_json(route, &experiment_response).and_then(|mut response| {
+                    // TODO: depends on whether we are doing cookie tracking
+                    if let Some(tracking_cookie_name) = experiment_response.tracking_cookie_name.as_ref() {
+                        let cookie_value = match experiment_response.tracking_data.as_ref() {
+                            None => "",
+                            Some(tracking_data) => tracking_data,
+                        };
 
-                            let cookie = cookie::Cookie::build(tracking_cookie_name, cookie_value)
-                                .path("/")
-                                .permanent()
-                                // .secure(true) // TODO: depends on installation setting
-                                .http_only(true)
-                                .finish();
+                        let cookie = cookie::Cookie::build(tracking_cookie_name, cookie_value)
+                            .path("/")
+                            .permanent()
+                            // .secure(true) // TODO: depends on installation setting
+                            .http_only(true)
+                            .finish();
 
-                            response.headers_mut().append(
-                                SET_COOKIE,
-                                HeaderValue::from_str(&cookie.to_string()).with_context(|| {
-                                    format!("Error in building header value for cookie")
-                                })?,
-                            );
-                        }
+                        response.headers_mut().append(
+                            SET_COOKIE,
+                            HeaderValue::from_str(&cookie.to_string()).with_context(|| format!("Error in building header value for cookie"))?,
+                        );
+                    }
 
-                        Ok(response)
-                    },
-                )
+                    Ok(response)
+                })
             })
         };
 

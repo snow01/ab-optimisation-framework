@@ -18,10 +18,7 @@ impl CounterIncrementer for AtomicInt<u64> {
 }
 
 #[derive(Clone, Debug)]
-pub struct TotalTimeElapsed<A: CounterIncrementer = AtomicInt<u64>, C: Instant = StdInstant>(
-    pub A,
-    pub std::marker::PhantomData<C>,
-);
+pub struct TotalTimeElapsed<A: CounterIncrementer = AtomicInt<u64>, C: Instant = StdInstant>(pub A, pub std::marker::PhantomData<C>);
 
 impl<A: CounterIncrementer, C: Instant, R> Metric<R> for TotalTimeElapsed<A, C> {}
 

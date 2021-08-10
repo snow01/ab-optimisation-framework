@@ -51,8 +51,7 @@ impl AbOptimisationService {
         req_data.id = id.to_string();
         self.write_app_data(&req_data)?;
 
-        self.apps
-            .insert(id.to_string(), RwLock::new(req_data), guard);
+        self.apps.insert(id.to_string(), RwLock::new(req_data), guard);
 
         HttpResponse::binary_or_json(route, &AddResponse { id })
     }
@@ -65,36 +64,25 @@ impl AbOptimisationService {
         // validate app data
         self.validate_app_data(&req, Some(app_id), guard)?;
 
-        self.visit_app(
-            app_id,
-            guard,
-            |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
-                let app_lock = entry.value();
-                let mut app_guard = app_lock.write();
-                if app_guard.short_name != req.short_name {
-                    app_guard.short_name = req.short_name
-                }
+        self.visit_app(app_id, guard, |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
+            let app_lock = entry.value();
+            let mut app_guard = app_lock.write();
+            if app_guard.short_name != req.short_name {
+                app_guard.short_name = req.short_name
+            }
 
-                if app_guard.name != req.name {
-                    app_guard.name = req.name
-                }
+            if app_guard.name != req.name {
+                app_guard.name = req.name
+            }
 
-                self.write_app_data(&app_guard)?;
+            self.write_app_data(&app_guard)?;
 
-                HttpResponse::str(route, "SUCCESS")
-            },
-        )
+            HttpResponse::str(route, "SUCCESS")
+        })
     }
 
-    fn validate_app_data(
-        &self,
-        data_to_validate: &App,
-        update_id: Option<&str>,
-        guard: &Guard,
-    ) -> Result<(), ApiError> {
-        data_to_validate
-            .validate()
-            .with_context(|| format!("Error in validating app data"))?;
+    fn validate_app_data(&self, data_to_validate: &App, update_id: Option<&str>, guard: &Guard) -> Result<(), ApiError> {
+        data_to_validate.validate().with_context(|| format!("Error in validating app data"))?;
 
         for entry in self.apps.iter(guard) {
             let value = entry.value();
@@ -107,17 +95,11 @@ impl AbOptimisationService {
             }
 
             if app.short_name.eq(&data_to_validate.short_name) {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "App with same short_name={} already exists",
-                    app.short_name
-                )));
+                return Err(ApiError::BadRequest(anyhow!("App with same short_name={} already exists", app.short_name)));
             }
 
             if app.name.eq(&data_to_validate.name) {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "App with same name={} already exists",
-                    app.name
-                )));
+                return Err(ApiError::BadRequest(anyhow!("App with same name={} already exists", app.name)));
             }
         }
 
@@ -127,17 +109,13 @@ impl AbOptimisationService {
     pub async fn get_app(&self, route: &HttpRoute<'_>, app_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
-        self.visit_app(
-            app_id,
-            guard,
-            |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
-                let app_lock = entry.value();
-                let app_guard = app_lock.read();
-                let app = app_guard.deref();
+        self.visit_app(app_id, guard, |entry: crossbeam_skiplist::base::Entry<String, RwLock<App>>| {
+            let app_lock = entry.value();
+            let app_guard = app_lock.read();
+            let app = app_guard.deref();
 
-                HttpResponse::binary_or_json(route, app)
-            },
-        )
+            HttpResponse::binary_or_json(route, app)
+        })
     }
 
     pub async fn list_apps(&self, route: &HttpRoute<'_>) -> HttpResult {
@@ -154,10 +132,7 @@ impl AbOptimisationService {
         match entry {
             None => {
                 // insert here
-                Err(ApiError::NotFound(format!(
-                    "No app found for id: {}",
-                    app_id
-                )))
+                Err(ApiError::NotFound(format!("No app found for id: {}", app_id)))
             }
             Some(entry) => visitor(entry),
         }

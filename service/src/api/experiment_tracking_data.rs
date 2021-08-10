@@ -124,18 +124,14 @@ impl TrackingDataParser {
             Ok(result) => result,
             Err(err) => {
                 warn!("Error in parsing cookie: {} ==> {:?}", value, err);
-                TrackingData {
-                    experiments: vec![],
-                }
+                TrackingData { experiments: vec![] }
             }
         }
     }
 
     pub fn parse_tracking_data(value: &str) -> anyhow::Result<TrackingData> {
         if value.is_empty() {
-            return Ok(TrackingData {
-                experiments: vec![],
-            });
+            return Ok(TrackingData { experiments: vec![] });
         }
 
         let cookie_rule = TrackingDataParser::parse(Rule::cookie, value)
@@ -168,9 +164,7 @@ impl TrackingDataParser {
         Self::parse_experiment_rule(experiment_rule)
     }
 
-    fn parse_experiment_rule(
-        experiment_rule: pest::iterators::Pair<Rule>,
-    ) -> anyhow::Result<TrackedExperiment> {
+    fn parse_experiment_rule(experiment_rule: pest::iterators::Pair<Rule>) -> anyhow::Result<TrackedExperiment> {
         let mut short_name = "";
         let mut selected_version: i64 = 0;
         let mut selected_member_kind = ExperimentMemberKind::Control;

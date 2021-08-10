@@ -32,13 +32,7 @@ impl HasId for AudienceList {
 }
 
 impl AbOptimisationService {
-    pub async fn add_audience_list(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        body: Body,
-    ) -> HttpResult {
+    pub async fn add_audience_list(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<AudienceList>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -52,9 +46,7 @@ impl AbOptimisationService {
             req_data.id = id.to_string();
             self.write_audience_list_data(app_id, project_id, &req_data)?;
 
-            project
-                .audience_lists
-                .insert(id.to_string(), RwLock::new(req_data), guard);
+            project.audience_lists.insert(id.to_string(), RwLock::new(req_data), guard);
 
             HttpResponse::binary_or_json(route, &AddResponse { id })
         };
@@ -62,24 +54,16 @@ impl AbOptimisationService {
         self.visit_project(app_id, project_id, guard, visitor)
     }
 
-    pub async fn update_audience_list(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        list_id: &str,
-        body: Body,
-    ) -> HttpResult {
+    pub async fn update_audience_list(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, list_id: &str, body: Body) -> HttpResult {
         let req_data = HttpRequest::value::<AudienceList>(route, body).await?;
 
         let guard = &epoch::pin();
 
-        let validation_visitor =
-            |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
-                let project = entry.value().read();
+        let validation_visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
+            let project = entry.value().read();
 
-                self.validate_audience_list_data(&project, &req_data, Some(list_id), guard)
-            };
+            self.validate_audience_list_data(&project, &req_data, Some(list_id), guard)
+        };
 
         self.visit_project(app_id, project_id, guard, validation_visitor)?;
 
@@ -100,16 +84,8 @@ impl AbOptimisationService {
         self.visit_audience_list(app_id, project_id, list_id, guard, visitor)
     }
 
-    fn validate_audience_list_data(
-        &self,
-        project: &Project,
-        data_to_validate: &AudienceList,
-        update_id: Option<&str>,
-        guard: &Guard,
-    ) -> ApiResult<()> {
-        data_to_validate
-            .validate()
-            .with_context(|| format!("Error in validating audience list data"))?;
+    fn validate_audience_list_data(&self, project: &Project, data_to_validate: &AudienceList, update_id: Option<&str>, guard: &Guard) -> ApiResult<()> {
+        data_to_validate.validate().with_context(|| format!("Error in validating audience list data"))?;
 
         for entry in project.audience_lists.iter(guard) {
             let value = entry.value();
@@ -122,23 +98,14 @@ impl AbOptimisationService {
             }
 
             if experiment.name.eq(&data_to_validate.name) {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "Audience List with same name={} already exists",
-                    experiment.name
-                )));
+                return Err(ApiError::BadRequest(anyhow!("Audience List with same name={} already exists", experiment.name)));
             }
         }
 
         Ok(())
     }
 
-    pub async fn get_audience_list(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        list_id: &str,
-    ) -> HttpResult {
+    pub async fn get_audience_list(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, list_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<AudienceList>>| {
@@ -151,12 +118,7 @@ impl AbOptimisationService {
         self.visit_audience_list(app_id, project_id, list_id, guard, visitor)
     }
 
-    pub async fn list_audience_lists(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-    ) -> HttpResult {
+    pub async fn list_audience_lists(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
@@ -171,14 +133,7 @@ impl AbOptimisationService {
         self.visit_project(app_id, project_id, guard, visitor)
     }
 
-    pub fn visit_audience_list<'g, F, R>(
-        &self,
-        app_id: &str,
-        project_id: &str,
-        list_id: &str,
-        guard: &'g Guard,
-        visitor: F,
-    ) -> ApiResult<R>
+    pub fn visit_audience_list<'g, F, R>(&self, app_id: &str, project_id: &str, list_id: &str, guard: &'g Guard, visitor: F) -> ApiResult<R>
     where
         F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<AudienceList>>) -> ApiResult<R>,
     {

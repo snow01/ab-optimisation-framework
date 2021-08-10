@@ -17,17 +17,11 @@ pub fn settings() -> &'static RwLock<Config> {
 }
 
 fn http_workers() -> usize {
-    settings()
-        .read()
-        .get::<usize>("http_workers")
-        .unwrap_or_else(|_| 1)
+    settings().read().get::<usize>("http_workers").unwrap_or_else(|_| 1)
 }
 
 fn json_payload_limit() -> usize {
-    settings()
-        .read()
-        .get::<usize>("json_payload_limit")
-        .unwrap_or_else(|_| 1_048_576)
+    settings().read().get::<usize>("json_payload_limit").unwrap_or_else(|_| 1_048_576)
 }
 
 pub fn load_global_config(base_dir: &str, env: &str) -> anyhow::Result<()> {

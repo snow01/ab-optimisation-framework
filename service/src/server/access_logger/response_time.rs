@@ -14,8 +14,7 @@ pub struct HdrHistogram {
 
 impl Histogram for HdrHistogram {
     fn with_bound(max_bound: u64) -> Self {
-        let histogram = hdrhistogram::Histogram::<u64>::new_with_bounds(1, max_bound, 2)
-            .expect("Could not instantiate HdrHistogram");
+        let histogram = hdrhistogram::Histogram::<u64>::new_with_bounds(1, max_bound, 2).expect("Could not instantiate HdrHistogram");
         let histogram = parking_lot::Mutex::new(histogram);
         HdrHistogram { histogram }
     }
@@ -81,10 +80,7 @@ impl Debug for HdrHistogram {
 }
 
 #[derive(Clone)]
-pub struct ResponseTime<H: Histogram = HdrHistogram, T: Instant = StdInstant>(
-    H,
-    std::marker::PhantomData<T>,
-);
+pub struct ResponseTime<H: Histogram = HdrHistogram, T: Instant = StdInstant>(H, std::marker::PhantomData<T>);
 
 impl<H: Histogram, T: Instant> Default for ResponseTime<H, T> {
     fn default() -> Self {

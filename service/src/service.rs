@@ -9,15 +9,17 @@ use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use regex::Regex;
 use serde::Serialize;
+use std::sync::Arc;
 use walkdir::WalkDir;
 
 use crate::config::settings;
-use crate::core::{App, AudienceList, Experiment, Project};
+use crate::core::{App, AudienceList, Experiment, Project, ScriptEvaluator};
 use crate::server::ServiceBuilder;
 
 // #[derive(Clone)]
 pub struct AbOptimisationService {
     pub apps: SkipList<String, RwLock<App>>,
+    pub script_evaluator: Arc<ScriptEvaluator>,
 }
 
 pub struct AbOptimisationServiceBuilder {}
@@ -26,6 +28,7 @@ impl ServiceBuilder<AbOptimisationService> for AbOptimisationServiceBuilder {
     fn build(self) -> anyhow::Result<AbOptimisationService> {
         let service = AbOptimisationService {
             apps: SkipList::new(epoch::default_collector().clone()),
+            script_evaluator: Arc::new(ScriptEvaluator::new()),
         };
 
         load_all_apps(&service)?;
@@ -44,8 +47,7 @@ impl AbOptimisationService {
         let guard = &epoch::pin();
         app.id = app_id.to_string();
 
-        self.apps
-            .insert(app_id.to_string(), RwLock::new(app), guard);
+        self.apps.insert(app_id.to_string(), RwLock::new(app), guard);
 
         Ok(())
     }
@@ -58,24 +60,14 @@ impl AbOptimisationService {
         write_helper(app, file_path)
     }
 
-    pub fn load_project(
-        &self,
-        file: &str,
-        app_id: &str,
-        project_id: &str,
-        mut project: Project,
-    ) -> anyhow::Result<()> {
+    pub fn load_project(&self, file: &str, app_id: &str, project_id: &str, mut project: Project) -> anyhow::Result<()> {
         info!("Loading project for app:{}, id:{}", app_id, project_id);
 
         let guard = &epoch::pin();
         project.id = project_id.to_string();
 
         self.visit_app(app_id, guard, |entry| {
-            entry.value().read().projects.insert(
-                project_id.to_string(),
-                RwLock::new(project),
-                guard,
-            );
+            entry.value().read().projects.insert(project_id.to_string(), RwLock::new(project), guard);
 
             Ok(())
         })
@@ -83,99 +75,58 @@ impl AbOptimisationService {
     }
 
     pub fn write_project_data(&self, app_id: &str, proj: &Project) -> anyhow::Result<()> {
-        let file_path = format!(
-            "{}/{}.{}.project.data.json",
-            projects_directory(),
-            app_id,
-            &proj.id
-        );
+        let file_path = format!("{}/{}.{}.project.data.json", projects_directory(), app_id, &proj.id);
 
         info!("Writing project data to file: {}", file_path);
 
         write_helper(proj, file_path)
     }
 
-    pub fn load_experiment(
-        &self,
-        file: &str,
-        app_id: &str,
-        project_id: &str,
-        experiment_id: &str,
-        mut experiment: Experiment,
-    ) -> anyhow::Result<()> {
-        info!(
-            "Loading experiment fo app:{}, project:{}, id:{}",
-            app_id, project_id, experiment_id
-        );
+    pub fn load_experiment(&self, file: &str, app_id: &str, project_id: &str, experiment_id: &str, mut experiment: Experiment) -> anyhow::Result<()> {
+        info!("Loading experiment fo app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
 
         let guard = &epoch::pin();
         experiment.id = experiment_id.to_string();
 
         self.visit_project(app_id, project_id, guard, |entry| {
-            entry.value().read().experiments.insert(
-                experiment_id.to_string(),
-                RwLock::new(experiment),
-                guard,
-            );
+            entry
+                .value()
+                .read()
+                .experiments
+                .insert(experiment_id.to_string(), RwLock::new(experiment), guard);
 
             Ok(())
         })
         .with_context(|| format!("Error in loading experiment from file: {}", file))
     }
 
-    pub fn write_experiment_data(
-        &self,
-        app_id: &str,
-        project_id: &str,
-        experiment: &Experiment,
-    ) -> anyhow::Result<()> {
-        let file_path = format!(
-            "{}/{}.{}.{}.experiment.data.json",
-            experiments_directory(),
-            app_id,
-            project_id,
-            &experiment.id
-        );
+    pub fn write_experiment_data(&self, app_id: &str, project_id: &str, experiment: &Experiment) -> anyhow::Result<()> {
+        let file_path = format!("{}/{}.{}.{}.experiment.data.json", experiments_directory(), app_id, project_id, &experiment.id);
 
         info!("Writing experiment data to file: {}", file_path);
 
         write_helper(experiment, file_path)
     }
 
-    pub fn load_audience_list(
-        &self,
-        file: &str,
-        app_id: &str,
-        project_id: &str,
-        list_id: &str,
-        mut audience_list: AudienceList,
-    ) -> anyhow::Result<()> {
-        info!(
-            "Loading audience_list for app:{}, project:{}, list_id:{}",
-            app_id, project_id, list_id
-        );
+    pub fn load_audience_list(&self, file: &str, app_id: &str, project_id: &str, list_id: &str, mut audience_list: AudienceList) -> anyhow::Result<()> {
+        info!("Loading audience_list for app:{}, project:{}, list_id:{}", app_id, project_id, list_id);
 
         let guard = &epoch::pin();
         audience_list.id = list_id.to_string();
 
         self.visit_project(app_id, project_id, guard, |entry| {
-            entry.value().read().audience_lists.insert(
-                list_id.to_string(),
-                RwLock::new(audience_list),
-                guard,
-            );
+            entry
+                .value()
+                .read()
+                .audience_lists
+                .insert(list_id.to_string(), RwLock::new(audience_list), guard);
 
             Ok(())
         })
         .with_context(|| format!("Error in loading audience list from file: {}", file))
     }
 
-    pub fn write_audience_list_data(
-        &self,
-        app_id: &str,
-        project_id: &str,
-        audience_list: &AudienceList,
-    ) -> anyhow::Result<()> {
+    pub fn write_audience_list_data(&self, app_id: &str, project_id: &str, audience_list: &AudienceList) -> anyhow::Result<()> {
         let file_path = format!(
             "{}/{}.{}.{}.audience-list.data.json",
             audience_lists_directory(),
@@ -191,10 +142,7 @@ impl AbOptimisationService {
 }
 
 fn apps_directory() -> String {
-    settings()
-        .read()
-        .get::<String>("apps_directory")
-        .unwrap_or_else(|_| format!("data/apps"))
+    settings().read().get::<String>("apps_directory").unwrap_or_else(|_| format!("data/apps"))
 }
 
 fn projects_directory() -> String {
@@ -227,11 +175,7 @@ fn load_all_apps(service: &AbOptimisationService) -> anyhow::Result<()> {
     )
     .unwrap();
 
-    for entry in WalkDir::new(apps_directory())
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in WalkDir::new(apps_directory()).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         let f_name = entry.file_name().to_string_lossy();
         // info!("Got file: {}", f_name);
 
@@ -244,12 +188,7 @@ fn load_all_apps(service: &AbOptimisationService) -> anyhow::Result<()> {
             let reader = BufReader::new(file);
 
             // Read the JSON contents of the file as an instance of `User`.
-            let app: App = serde_json::from_reader(reader).with_context(|| {
-                format!(
-                    "Error in parsing app from file: {}",
-                    entry.path().to_string_lossy()
-                )
-            })?;
+            let app: App = serde_json::from_reader(reader).with_context(|| format!("Error in parsing app from file: {}", entry.path().to_string_lossy()))?;
             service.load_app(app_id, app)?;
         }
     }
@@ -268,11 +207,7 @@ fn load_all_projects(service: &AbOptimisationService) -> anyhow::Result<()> {
     )
     .unwrap();
 
-    for entry in WalkDir::new(projects_directory())
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in WalkDir::new(projects_directory()).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         let f_name = entry.file_name().to_string_lossy();
         // info!("Got file: {}", f_name);
 
@@ -286,20 +221,11 @@ fn load_all_projects(service: &AbOptimisationService) -> anyhow::Result<()> {
             let reader = BufReader::new(file);
 
             // Read the JSON contents of the file as an instance of `User`.
-            let project: Project = serde_json::from_reader(reader).with_context(|| {
-                format!(
-                    "Error in parsing project from file: {}",
-                    entry.path().to_string_lossy()
-                )
-            })?;
+            let project: Project =
+                serde_json::from_reader(reader).with_context(|| format!("Error in parsing project from file: {}", entry.path().to_string_lossy()))?;
             service
                 .load_project(&f_name, app_id, project_id, project)
-                .with_context(|| {
-                    format!(
-                        "Error in adding project for file: {}",
-                        entry.path().to_string_lossy()
-                    )
-                })?;
+                .with_context(|| format!("Error in adding project for file: {}", entry.path().to_string_lossy()))?;
         }
     }
 
@@ -319,11 +245,7 @@ fn load_all_experiments(service: &AbOptimisationService) -> anyhow::Result<()> {
     )
     .unwrap();
 
-    for entry in WalkDir::new(experiments_directory())
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in WalkDir::new(experiments_directory()).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         let f_name = entry.file_name().to_string_lossy();
         // info!("Got file: {}", f_name);
 
@@ -341,20 +263,11 @@ fn load_all_experiments(service: &AbOptimisationService) -> anyhow::Result<()> {
             let reader = BufReader::new(file);
 
             // Read the JSON contents of the file as an instance of `User`.
-            let experiment: Experiment = serde_json::from_reader(reader).with_context(|| {
-                format!(
-                    "Error in parsing experiment from file: {}",
-                    entry.path().to_string_lossy()
-                )
-            })?;
+            let experiment: Experiment =
+                serde_json::from_reader(reader).with_context(|| format!("Error in parsing experiment from file: {}", entry.path().to_string_lossy()))?;
             service
                 .load_experiment(&f_name, app_id, project_id, experiment_id, experiment)
-                .with_context(|| {
-                    format!(
-                        "Error in adding experiment for file: {}",
-                        entry.path().to_string_lossy()
-                    )
-                })?;
+                .with_context(|| format!("Error in adding experiment for file: {}", entry.path().to_string_lossy()))?;
         }
         // if f_name.matches("{}-{}-{}-experiment-data.json") {
         //
@@ -377,11 +290,7 @@ fn load_all_audience_lists(service: &AbOptimisationService) -> anyhow::Result<()
     )
     .unwrap();
 
-    for entry in WalkDir::new(audience_lists_directory())
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in WalkDir::new(audience_lists_directory()).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         let f_name = entry.file_name().to_string_lossy();
         // info!("Got file: {}", f_name);
 
@@ -400,20 +309,10 @@ fn load_all_audience_lists(service: &AbOptimisationService) -> anyhow::Result<()
 
             // Read the JSON contents of the file as an instance of `User`.
             let audience_list: AudienceList =
-                serde_json::from_reader(reader).with_context(|| {
-                    format!(
-                        "Error in parsing audience list from file: {}",
-                        entry.path().to_string_lossy()
-                    )
-                })?;
+                serde_json::from_reader(reader).with_context(|| format!("Error in parsing audience list from file: {}", entry.path().to_string_lossy()))?;
             service
                 .load_audience_list(&f_name, app_id, project_id, list_id, audience_list)
-                .with_context(|| {
-                    format!(
-                        "Error in adding audience list for file: {}",
-                        entry.path().to_string_lossy()
-                    )
-                })?;
+                .with_context(|| format!("Error in adding audience list for file: {}", entry.path().to_string_lossy()))?;
         }
     }
 
@@ -428,8 +327,7 @@ where
     let mut writer = BufWriter::new(file);
 
     // Write the JSON contents to the file.
-    serde_json::to_writer(&mut writer, data)
-        .with_context(|| format!("Error in writing data to file: {}", file_path))?;
+    serde_json::to_writer(&mut writer, data).with_context(|| format!("Error in writing data to file: {}", file_path))?;
 
     writer.flush()?;
 

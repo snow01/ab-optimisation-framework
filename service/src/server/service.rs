@@ -16,10 +16,5 @@ pub trait ServiceBuilder<T: Service> {
 
 #[async_trait]
 pub trait Service: Send + Sync {
-    async fn api_handler<'a>(
-        &'a self,
-        body: Body,
-        route: &HttpRoute<'a>,
-        path: &[&str],
-    ) -> Result<Response<Body>, ApiError>;
+    async fn api_handler<'a>(&'a self, body: Body, route: &HttpRoute<'a>, path: &[&str]) -> Result<Response<Body>, ApiError>;
 }

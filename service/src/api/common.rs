@@ -25,10 +25,7 @@ impl Display for ExperimentMemberKind {
     }
 }
 
-pub fn merge_data(
-    experiment_data: Option<serde_json::Value>,
-    variation_data: Option<serde_json::Value>,
-) -> Option<serde_json::Value> {
+pub fn merge_data(experiment_data: Option<serde_json::Value>, variation_data: Option<serde_json::Value>) -> Option<serde_json::Value> {
     match (experiment_data, variation_data) {
         (None, None) => None,
         (Some(data), None) | (None, Some(data)) => Some(data.clone()),

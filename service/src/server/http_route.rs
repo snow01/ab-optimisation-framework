@@ -5,9 +5,7 @@ use chrono::Local;
 use http::{header, Method, Request, Uri};
 use hyper::Body;
 
-use crate::server::commons::{
-    BR_CONTENT_ENCODING, DEFLATE_CONTENT_ENCODING, GZIP_CONTENT_ENCODING,
-};
+use crate::server::commons::{BR_CONTENT_ENCODING, DEFLATE_CONTENT_ENCODING, GZIP_CONTENT_ENCODING};
 
 pub struct HttpRoute<'a> {
     pub req: &'a Request<Body>,
@@ -23,19 +21,10 @@ pub struct HttpRoute<'a> {
     pub remote_addr: SocketAddr,
 }
 
-const CONTENT_ENCODINGS: [&'static [u8]; 3] = [
-    BR_CONTENT_ENCODING,
-    GZIP_CONTENT_ENCODING,
-    DEFLATE_CONTENT_ENCODING,
-];
+const CONTENT_ENCODINGS: [&'static [u8]; 3] = [BR_CONTENT_ENCODING, GZIP_CONTENT_ENCODING, DEFLATE_CONTENT_ENCODING];
 
 impl<'a> HttpRoute<'a> {
-    pub fn new(
-        req: &'a Request<Body>,
-        req_time: chrono::DateTime<Local>,
-        req_instant: Instant,
-        remote_addr: SocketAddr,
-    ) -> HttpRoute<'a> {
+    pub fn new(req: &'a Request<Body>, req_time: chrono::DateTime<Local>, req_instant: Instant, remote_addr: SocketAddr) -> HttpRoute<'a> {
         HttpRoute {
             req,
             req_time,
@@ -44,24 +33,18 @@ impl<'a> HttpRoute<'a> {
             uri: req.uri(),
             path: req.uri().path(),
             query: req.uri().query(),
-            content_encoding: req
-                .headers()
-                .get(header::CONTENT_ENCODING)
-                .map(|value| value.as_bytes().to_ascii_lowercase()),
-            accept_encoding: req
-                .headers()
-                .get(header::ACCEPT_ENCODING)
-                .and_then(|value| {
-                    let accept_encodings = value.as_bytes().to_ascii_lowercase();
+            content_encoding: req.headers().get(header::CONTENT_ENCODING).map(|value| value.as_bytes().to_ascii_lowercase()),
+            accept_encoding: req.headers().get(header::ACCEPT_ENCODING).and_then(|value| {
+                let accept_encodings = value.as_bytes().to_ascii_lowercase();
 
-                    for encoding in CONTENT_ENCODINGS.iter() {
-                        if let Some(_index) = twoway::find_bytes(&accept_encodings, encoding) {
-                            return Some(*encoding);
-                        }
+                for encoding in CONTENT_ENCODINGS.iter() {
+                    if let Some(_index) = twoway::find_bytes(&accept_encodings, encoding) {
+                        return Some(*encoding);
                     }
+                }
 
-                    None
-                }),
+                None
+            }),
             metric_path: None,
             remote_addr,
         }

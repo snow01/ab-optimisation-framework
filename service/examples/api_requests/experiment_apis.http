@@ -102,7 +102,7 @@ Content-Type: application/json
       "kind": "Audience",
       "name": "new_users",
       "audience_kind": "Script",
-      "script_src": "not ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3' and not ctx.get('relaunch_onboarding_flow', False)",
+      "script_src": "not ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3'",
       "size_kind": "Percent",
       "value": 5
     }
@@ -131,13 +131,13 @@ Content-Type: application/json
   "inactive": false,
   "start_time": null,
   "end_time": null,
-  "frequency_constraint": "fns.allow_only_once(experiment)",
+  "frequency_constraint": "fns.allow_every_x_times(experiment, 2)",
   "audiences": [
     {
       "kind": "Audience",
       "name": "new_users",
       "audience_kind": "Script",
-      "script_src": "not ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3' and not ctx.get('relaunch_onboarding_flow', False)",
+      "script_src": "not ctx.get('new_user', False) and ctx.get('app_version', '0.0.0') >= '4.7.3'",
       "size_kind": "Percent",
       "value": 100
     }

@@ -83,9 +83,7 @@ impl AbOptimisationService {
             req_data.id = id.to_string();
             self.write_project_data(app_id, &req_data)?;
 
-            app_guard
-                .projects
-                .insert(id.to_string(), RwLock::new(req_data), guard);
+            app_guard.projects.insert(id.to_string(), RwLock::new(req_data), guard);
 
             HttpResponse::binary_or_json(route, &AddResponse { id })
         };
@@ -93,13 +91,7 @@ impl AbOptimisationService {
         self.visit_app(app_id, guard, visitor)
     }
 
-    pub async fn update_project(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-        body: Body,
-    ) -> HttpResult {
+    pub async fn update_project(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, body: Body) -> HttpResult {
         let req_data = HttpRequest::value::<Project>(route, body).await?;
 
         let guard = &epoch::pin();
@@ -136,16 +128,8 @@ impl AbOptimisationService {
         self.visit_project(app_id, project_id, guard, visitor)
     }
 
-    fn validate_project_data(
-        &self,
-        app: &App,
-        data_to_validate: &Project,
-        update_id: Option<&str>,
-        guard: &Guard,
-    ) -> ApiResult<()> {
-        data_to_validate
-            .validate()
-            .with_context(|| format!("Error in validating project data"))?;
+    fn validate_project_data(&self, app: &App, data_to_validate: &Project, update_id: Option<&str>, guard: &Guard) -> ApiResult<()> {
+        data_to_validate.validate().with_context(|| format!("Error in validating project data"))?;
 
         for entry in app.projects.iter(guard) {
             let value = entry.value();
@@ -158,29 +142,18 @@ impl AbOptimisationService {
             }
 
             if proj.short_name.eq(&data_to_validate.short_name) {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "Project with same short_name={} already exists",
-                    app.short_name
-                )));
+                return Err(ApiError::BadRequest(anyhow!("Project with same short_name={} already exists", app.short_name)));
             }
 
             if proj.name.eq(&data_to_validate.name) {
-                return Err(ApiError::BadRequest(anyhow!(
-                    "Project with same name={} already exists",
-                    app.name
-                )));
+                return Err(ApiError::BadRequest(anyhow!("Project with same name={} already exists", app.name)));
             }
         }
 
         Ok(())
     }
 
-    pub async fn get_project(
-        &self,
-        route: &HttpRoute<'_>,
-        app_id: &str,
-        project_id: &str,
-    ) -> HttpResult {
+    pub async fn get_project(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str) -> HttpResult {
         let guard = &epoch::pin();
 
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
@@ -207,13 +180,7 @@ impl AbOptimisationService {
         self.visit_app(app_id, guard, visitor)
     }
 
-    pub fn visit_project<'g, F, R>(
-        &self,
-        app_id: &str,
-        project_id: &str,
-        guard: &'g Guard,
-        visitor: F,
-    ) -> ApiResult<R>
+    pub fn visit_project<'g, F, R>(&self, app_id: &str, project_id: &str, guard: &'g Guard, visitor: F) -> ApiResult<R>
     where
         F: FnOnce(crossbeam_skiplist::base::Entry<String, RwLock<Project>>) -> ApiResult<R>,
     {

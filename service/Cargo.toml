@@ -9,10 +9,10 @@ edition = "2018"
 [dependencies]
 jemallocator = "0.3.2"
 anyhow = "1.0.42"
-serde = { version = "1.0.126", features = ['derive', 'rc'] }
-serde_json = "1.0.64"
+serde = { version = "1.0.127", features = ['derive', 'rc'] }
+serde_json = "1.0.66"
 log = "0.4.14"
-futures = { version = "0.3.15", features = ['default'] }
+futures = { version = "0.3.16", features = ['default'] }
 lazy_static = "1.4.0"
 uuid = { version = "0.8.2", features = ["v4", "serde"] }
 rand = "0.8.4"
@@ -20,8 +20,8 @@ config = "0.11.0"
 base64 = "0.13.0"
 clap = { version = "2.33.3", features = ["yaml"] }
 log4rs = "1.0.0"
-hyper = { version = "0.14.10", features = ["full"] }
-tokio = { version = "1.8.1", features = ["full"] }
+hyper = { version = "0.14.11", features = ["full"] }
+tokio = { version = "1.9.0", features = ["full"] }
 itertools = "0.10.1"
 diesel = { version = "1.4.7", features = ["extras", "postgres", "uuidv07"] }
 enumset = "1.0.7"
@@ -30,7 +30,7 @@ derive_more = "0.99.16"
 parking_lot = "0.11.1"
 http = "0.2.4"
 objekt-clonable = "0.2.2"
-libc = "0.2.98"
+libc = "0.2.99"
 
 bytes = "1.0.1"
 async-compression = { version = "0.3.8", features = ["brotli", "deflate", "gzip", "tokio", "futures-io"] }
@@ -40,19 +40,19 @@ metered = "0.8.0"
 twoway = "0.2.2"
 #crossbeam = "0.8.1"
 tokio-util = { version = "0.6.7", features = ["io"] }
-async-trait = "0.1.50"
+async-trait = "0.1.51"
 humantime-serde = "1.0.1"
 humantime = "2.1.0"
 hdrhistogram = "7.3.0"
 thiserror = "1.0.26"
 pest = "2.1.3"
 pest_derive = "2.1.0"
-cookie = "0.15.0"
+cookie = "0.15.1"
 walkdir = "2.3.2"
 bincode = "1.3.3"
 json_value_merge = "0.1.3"
 maplit = "1.0.2"
-pythonize = "0.14.0"
+#pythonize = "0.14.0"
 nanoid = "0.4.0"
 regex = "1.5.4"
 fasthash = "0.4.0"
@@ -63,9 +63,17 @@ validator = { version = "0.14.0", features = ["derive"] }
 version = "0.4.19"
 features = ["serde"]
 
-[dependencies.pyo3]
-version = "0.14.1"
-features = ["auto-initialize", "macros"]
+#[dependencies.pyo3]
+#version = "0.14.1"
+#features = ["auto-initialize", "macros"]
+
+[dependencies.jexl-eval]
+git = "https://github.com/snow01/jexl-rs"
+#path = "/Users/shailendra/WS/github/snow01/jexl-rs/jexl-eval"
+
+[dependencies.jexl-parser]
+git = "https://github.com/snow01/jexl-rs"
+#path = "/Users/shailendra/WS/github/snow01/jexl-rs/jexl-parser"
 
 [dependencies.crossbeam-utils]
 git = "https://github.com/snow01/crossbeam"

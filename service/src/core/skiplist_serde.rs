@@ -19,16 +19,11 @@ use serde::ser::SerializeSeq;
 // }
 
 #[derive(Serialize)]
-pub struct SerdeListWrapper<'a, T>(
-    #[serde(serialize_with = "serialize")] pub &'a SkipList<String, RwLock<T>>,
-)
+pub struct SerdeListWrapper<'a, T>(#[serde(serialize_with = "serialize")] pub &'a SkipList<String, RwLock<T>>)
 where
     T: Serialize + Send + 'static;
 
-pub fn serialize<T, S>(
-    value: &SkipList<String, RwLock<T>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
+pub fn serialize<T, S>(value: &SkipList<String, RwLock<T>>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
     T: Serialize + Send + 'static,

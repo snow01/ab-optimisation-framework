@@ -7,6 +7,8 @@ pub use experiment::Experiment;
 pub use experiment::SizeSpec;
 pub use project::Project;
 pub use project::TrackingMethod;
+pub use script::Script;
+pub use script::ScriptEvaluator;
 pub use variation::Variation;
 
 pub mod app;
@@ -14,6 +16,7 @@ mod audience_list;
 mod experiment;
 mod experiment_group;
 mod project;
+mod script;
 mod skiplist_serde;
 mod variation;
 

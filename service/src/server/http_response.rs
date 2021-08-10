@@ -194,44 +194,23 @@ impl HttpResponse {
     //     Ok(Self::compress_response(route, response))
     // }
 
-    pub fn compress_response(
-        route: &HttpRoute<'_>,
-        mut response: Response<Body>,
-    ) -> Response<Body> {
+    pub fn compress_response(route: &HttpRoute<'_>, mut response: Response<Body>) -> Response<Body> {
         use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 
         // compress as needed
         if let Some(accept_encoding) = route.accept_encoding {
             match accept_encoding {
                 BR_CONTENT_ENCODING => {
-                    response
-                        .headers_mut()
-                        .insert(header::CONTENT_ENCODING, BR_HEADER_VALUE.clone());
-                    response = response.map(|body| {
-                        Body::wrap_stream(brotli_encode(
-                            body.map_err(|_| IOError::from(IOErrorKind::InvalidData)),
-                        ))
-                    });
+                    response.headers_mut().insert(header::CONTENT_ENCODING, BR_HEADER_VALUE.clone());
+                    response = response.map(|body| Body::wrap_stream(brotli_encode(body.map_err(|_| IOError::from(IOErrorKind::InvalidData)))));
                 }
                 DEFLATE_CONTENT_ENCODING => {
-                    response
-                        .headers_mut()
-                        .insert(header::CONTENT_ENCODING, DEFLATE_HEADER_VALUE.clone());
-                    response = response.map(|body| {
-                        Body::wrap_stream(deflate_encode(
-                            body.map_err(|_| IOError::from(IOErrorKind::InvalidData)),
-                        ))
-                    });
+                    response.headers_mut().insert(header::CONTENT_ENCODING, DEFLATE_HEADER_VALUE.clone());
+                    response = response.map(|body| Body::wrap_stream(deflate_encode(body.map_err(|_| IOError::from(IOErrorKind::InvalidData)))));
                 }
                 GZIP_CONTENT_ENCODING => {
-                    response
-                        .headers_mut()
-                        .insert(header::CONTENT_ENCODING, GZIP_HEADER_VALUE.clone());
-                    response = response.map(|body| {
-                        Body::wrap_stream(gzip_encode(
-                            body.map_err(|_| IOError::from(IOErrorKind::InvalidData)),
-                        ))
-                    });
+                    response.headers_mut().insert(header::CONTENT_ENCODING, GZIP_HEADER_VALUE.clone());
+                    response = response.map(|body| Body::wrap_stream(gzip_encode(body.map_err(|_| IOError::from(IOErrorKind::InvalidData)))));
                 }
                 _ => {
                     // do nothing
@@ -243,26 +222,14 @@ impl HttpResponse {
     }
 }
 
-fn gzip_encode(
-    input: impl Stream<Item = std::io::Result<bytes::Bytes>>,
-) -> impl Stream<Item = std::io::Result<bytes::Bytes>> {
-    tokio_util::io::ReaderStream::new(async_compression::tokio::bufread::GzipEncoder::new(
-        tokio_util::io::StreamReader::new(input),
-    ))
+fn gzip_encode(input: impl Stream<Item = std::io::Result<bytes::Bytes>>) -> impl Stream<Item = std::io::Result<bytes::Bytes>> {
+    tokio_util::io::ReaderStream::new(async_compression::tokio::bufread::GzipEncoder::new(tokio_util::io::StreamReader::new(input)))
 }
 
-fn brotli_encode(
-    input: impl Stream<Item = std::io::Result<bytes::Bytes>>,
-) -> impl Stream<Item = std::io::Result<bytes::Bytes>> {
-    tokio_util::io::ReaderStream::new(async_compression::tokio::bufread::BrotliEncoder::new(
-        tokio_util::io::StreamReader::new(input),
-    ))
+fn brotli_encode(input: impl Stream<Item = std::io::Result<bytes::Bytes>>) -> impl Stream<Item = std::io::Result<bytes::Bytes>> {
+    tokio_util::io::ReaderStream::new(async_compression::tokio::bufread::BrotliEncoder::new(tokio_util::io::StreamReader::new(input)))
 }
 
-fn deflate_encode(
-    input: impl Stream<Item = std::io::Result<bytes::Bytes>>,
-) -> impl Stream<Item = std::io::Result<bytes::Bytes>> {
-    tokio_util::io::ReaderStream::new(async_compression::tokio::bufread::DeflateEncoder::new(
-        tokio_util::io::StreamReader::new(input),
-    ))
+fn deflate_encode(input: impl Stream<Item = std::io::Result<bytes::Bytes>>) -> impl Stream<Item = std::io::Result<bytes::Bytes>> {
+    tokio_util::io::ReaderStream::new(async_compression::tokio::bufread::DeflateEncoder::new(tokio_util::io::StreamReader::new(input)))
 }
