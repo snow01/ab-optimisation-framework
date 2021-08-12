@@ -23,7 +23,7 @@ appenders:
     kind: rolling_file
     path: "logs/access.log"
     encoder:
-      pattern: "{d} {l} {f}:{L} {t} - {m}{n}"
+      pattern: "{d} - {m}{n}"
     policy:
       kind: compound
       trigger:
@@ -53,59 +53,14 @@ root:
   appenders:
     - file
     - stdout
-#loggers:
-#  etcd::client:
-#    level: off
-#  obelix_core::shard:
-#    level: off
-#  obelix_core::shard::table_db:
-#    level: error
-#  obelix_core::shard::table_db::data_crud:
-#    level: info
-#  obelix_core::shard::actors:
-#    level: info
-#  obelix_core::shard::job_executor:
-#    level: info
-#  obelix_core::shard::job_manager:
-#    level: info
-#  obelix_core::node::job_manager:
-#    level: info
-#  obelix_core::common_jobs:
-#    level: off
-#  app::backend::db:
-#    level: off
-#  app::requests:
-#    level: off
-#  notification_engine::batcher:
-#    level: error
-#  notification-engine::job::job_execute_handler:
-#    level: info
-#  notification_engine::job::job_handler:
-#    level: off
-#  notification-engine::dispatcher::service:
-#    level: info
-#  obelix_core::search::commons:
-#    level: error
-#  actix_web:
-#    level: error
-#    appenders:
-#      - access_log
-#    additive: false
-#  job_manager::job_manager:
-#    level: error
-#  notification_engine::dispatcher::status_processor:
-#    level: error
-#  notification_engine::dispatcher::service:
-#    level: info
-#  notification_engine::dispatcher::msg_sender::ios_sender:
-#    level: info
-#  slow_query_log:
-#    level: info
-#    appenders:
-#      - slow_query_log
-#    additive: false
-#  warmup_log:
-#    level: info
-#    appenders:
-#      - warmup_log
-#    additive: false
+loggers:
+  access_log:
+    level: info
+    appenders:
+      - access_log
+    additive: false
+  metrics_log:
+    level: debug
+    appenders:
+      - access_log
+    additive: false

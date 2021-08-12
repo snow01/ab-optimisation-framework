@@ -17,46 +17,9 @@ appenders:
 root:
   level: debug
   appenders:
-    - stdout
     - file
+    - stdout
 loggers:
-#  obelix_core::replication::write_batch:
-#    level: off
-#  notification_engine::batcher::notif_batcher:
-#    level: off
-#  tokio_reactor:
-#    level: off
-#  hyper:
-#    level: off
-#  rustls:
-#    level: off
-#  trust_dns_proto:
-#    level: off
-#  h2:
-#    level: off
-#  postgres:
-#    level: off
-#  etcd::client:
-#    level: off
-#  obelix_core::shard:
-#    level: debug
-#  obelix_core::shard::job_executor:
-#    level: off
-#  obelix_core::shard::job_manager:
-#    level: off
-#  obelix_core::node::job_manager:
-#    level: off
-#  obelix_core::common_jobs:
-#    level: debug
-#  app::backend::db:
-#    level: info
-#  app::requests:
-#    level: info
-#    appenders:
-#      - file
-#    additive: false
-#  bit_page_vec_log:
-#    level: info
   access_log:
     level: info
     appenders:
