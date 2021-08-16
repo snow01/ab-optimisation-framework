@@ -32,6 +32,24 @@ impl HasId for AudienceList {
 }
 
 impl AbOptimisationService {
+    pub(crate) fn load_audience_list(&self, file: &str, app_id: &str, project_id: &str, list_id: &str, mut audience_list: AudienceList) -> anyhow::Result<()> {
+        info!("Loading audience_list for app:{}, project:{}, list_id:{}", app_id, project_id, list_id);
+
+        let guard = &epoch::pin();
+        audience_list.id = list_id.to_string();
+
+        self.visit_project(app_id, project_id, guard, |entry| {
+            entry
+                .value()
+                .read()
+                .audience_lists
+                .insert(list_id.to_string(), RwLock::new(audience_list), guard);
+
+            Ok(())
+        })
+        .with_context(|| format!("Error in loading audience list from file: {}", file))
+    }
+
     pub async fn add_audience_list(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<AudienceList>(route, body).await?;
 

@@ -175,6 +175,24 @@ fn default_sampler() -> rand::distributions::Uniform<u64> {
 }
 
 impl AbOptimisationService {
+    pub(crate) fn load_experiment(&self, file: &str, app_id: &str, project_id: &str, experiment_id: &str, mut experiment: Experiment) -> anyhow::Result<()> {
+        info!("Loading experiment for app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
+
+        let guard = &epoch::pin();
+        experiment.id = experiment_id.to_string();
+
+        self.visit_project(app_id, project_id, guard, |entry| {
+            entry
+                .value()
+                .read()
+                .experiments
+                .insert(experiment_id.to_string(), RwLock::new(experiment), guard);
+
+            Ok(())
+        })
+        .with_context(|| format!("Error in loading experiment from file: {}", file))
+    }
+
     pub async fn add_experiment(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<Experiment>(route, body).await?;
 

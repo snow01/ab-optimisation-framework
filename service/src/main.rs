@@ -37,6 +37,7 @@ use crate::service::{AbOptimisationService, AbOptimisationServiceBuilder};
 mod api;
 mod config;
 mod core;
+mod experiment_store;
 mod server;
 mod service;
 

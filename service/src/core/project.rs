@@ -68,6 +68,20 @@ fn default_tracking_method() -> TrackingMethod {
 }
 
 impl AbOptimisationService {
+    pub(crate) fn load_project(&self, file: &str, app_id: &str, project_id: &str, mut project: Project) -> anyhow::Result<()> {
+        info!("Loading project for app:{}, id:{}", app_id, project_id);
+
+        let guard = &epoch::pin();
+        project.id = project_id.to_string();
+
+        self.visit_app(app_id, guard, |entry| {
+            entry.value().read().projects.insert(project_id.to_string(), RwLock::new(project), guard);
+
+            Ok(())
+        })
+        .with_context(|| format!("Error in loading project from file: {}", file))
+    }
+
     pub async fn add_project(&self, route: &HttpRoute<'_>, app_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<Project>(route, body).await?;
 

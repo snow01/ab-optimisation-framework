@@ -39,6 +39,17 @@ fn default_projects() -> SkipList<String, RwLock<Project>> {
 }
 
 impl AbOptimisationService {
+    pub(crate) fn load_app(&self, app_id: &str, mut app: App) -> anyhow::Result<()> {
+        info!("Loading app for id:{}", app_id);
+
+        let guard = &epoch::pin();
+        app.id = app_id.to_string();
+
+        self.apps.insert(app_id.to_string(), RwLock::new(app), guard);
+
+        Ok(())
+    }
+
     pub async fn add_app(&self, route: &HttpRoute<'_>, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<App>(route, body).await?;
 
