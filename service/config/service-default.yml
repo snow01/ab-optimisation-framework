@@ -1,2 +1,5 @@
 http_workers: 2
 json_payload_limit: 262144
+store_kind: local
+store_config:
+  path: data

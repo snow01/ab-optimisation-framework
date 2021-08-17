@@ -49,7 +49,7 @@ appenders:
         pattern: "logs/warmup-{}.log"
 
 root:
-  level: debug
+  level: info
   appenders:
     - file
     - stdout
@@ -64,3 +64,9 @@ loggers:
     appenders:
       - access_log
     additive: false
+  reqwest:
+    level: off
+  hyper:
+    level: off
+  serde_xml_rs::de:
+    level: off

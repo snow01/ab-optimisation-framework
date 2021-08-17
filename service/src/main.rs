@@ -8,7 +8,7 @@ extern crate clap;
 // #[macro_use]
 pub extern crate derive_more;
 // #[macro_use]
-extern crate diesel;
+// extern crate diesel;
 #[macro_use]
 extern crate enumset;
 extern crate gethostname;
@@ -30,16 +30,16 @@ use log::{debug, error, info, warn};
 use log4rs;
 
 // crate specific imports
-use crate::config::load_global_config;
 use crate::server::{start_http_server, ServiceBuilder};
-use crate::service::{AbOptimisationService, AbOptimisationServiceBuilder};
+use crate::service::{AbOptimisationService, AbOptimisationServiceBuilder, AbOptimisationServiceDaemon};
+use crate::settings::load_global_config;
 
 mod api;
-mod config;
 mod core;
 mod experiment_store;
 mod server;
 mod service;
+mod settings;
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -51,7 +51,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
 pub async fn run_main<AppBuilder>(app_builder: AppBuilder) -> anyhow::Result<()>
 where
-    AppBuilder: 'static + ServiceBuilder<AbOptimisationService>,
+    AppBuilder: 'static + ServiceBuilder<AbOptimisationService, AbOptimisationServiceDaemon>,
 {
     // build command line
     let yaml = load_yaml!("cli.yml");

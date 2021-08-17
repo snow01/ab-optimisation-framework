@@ -6,18 +6,21 @@ use crossbeam_epoch as epoch;
 use crossbeam_epoch::Guard;
 use hyper::Body;
 use itertools::Itertools;
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
 use nanoid::nanoid;
-use parking_lot::RwLock;
+use parking_lot::lock_api::RwLockWriteGuard;
+use parking_lot::{RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use validator::{Validate, ValidationError};
 
+use crate::core::script::Script;
 use crate::core::{skiplist_serde, AddResponse, HasId, Project};
 use crate::server::{ApiError, ApiResult, HttpRequest, HttpResponse, HttpResult, HttpRoute};
 use crate::service::AbOptimisationService;
 
 use super::variation::Variation;
-use crate::core::script::Script;
 
 #[derive(Serialize, Deserialize, Validate)]
 pub struct Experiment {
@@ -66,6 +69,10 @@ pub struct Experiment {
     #[serde(default)]
     #[serde(skip)]
     pub test_size: AtomicU64,
+
+    #[serde(skip)]
+    #[serde(default)]
+    pub modification_time: i64,
 }
 
 impl PartialEq for Experiment {
@@ -175,18 +182,37 @@ fn default_sampler() -> rand::distributions::Uniform<u64> {
 }
 
 impl AbOptimisationService {
-    pub(crate) fn load_experiment(&self, file: &str, app_id: &str, project_id: &str, experiment_id: &str, mut experiment: Experiment) -> anyhow::Result<()> {
-        info!("Loading experiment for app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
-
+    pub(crate) fn load_experiment(
+        &self,
+        file: &str,
+        app_id: &str,
+        project_id: &str,
+        experiment_id: &str,
+        mut experiment: Experiment,
+        modification_time: i64,
+    ) -> anyhow::Result<()> {
         let guard = &epoch::pin();
-        experiment.id = experiment_id.to_string();
 
         self.visit_project(app_id, project_id, guard, |entry| {
-            entry
-                .value()
-                .read()
-                .experiments
-                .insert(experiment_id.to_string(), RwLock::new(experiment), guard);
+            experiment.id = experiment_id.to_string();
+            experiment.modification_time = modification_time;
+
+            let experiments = &entry.value().read().experiments;
+
+            match experiments.get(experiment_id, guard) {
+                None => {
+                    info!("Loading experiment for app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
+                    experiments.insert(experiment_id.to_string(), RwLock::new(experiment), guard);
+                }
+                Some(entry) => {
+                    let mut project_guard = entry.value().write();
+
+                    if modification_time == 0 || modification_time > project_guard.modification_time {
+                        info!("Updated experiment for app:{}, project:{}, id:{}", app_id, project_id, experiment_id);
+                        AbOptimisationService::update_experiment_data(experiment, &mut project_guard);
+                    }
+                }
+            }
 
             Ok(())
         })
@@ -207,7 +233,7 @@ impl AbOptimisationService {
 
             req_data.id = id.to_string();
             req_data.version = 1; // start with version # 1
-            self.write_experiment_data(app_id, project_id, &req_data)?;
+            self.experiment_store.write_experiment_data(app_id, project_id, &req_data)?;
 
             project.experiments.insert(id.to_string(), RwLock::new(req_data), guard);
 
@@ -233,77 +259,83 @@ impl AbOptimisationService {
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Experiment>>| {
             let mut existing_data = entry.value().write();
 
-            let mut changed = false;
-            if existing_data.name != req_data.name {
-                existing_data.name = req_data.name;
-                changed = true;
-            }
+            AbOptimisationService::update_experiment_data(req_data, &mut existing_data);
 
-            if existing_data.short_name != req_data.short_name {
-                existing_data.short_name = req_data.short_name;
-                changed = true;
-            }
-
-            if existing_data.kind != req_data.kind {
-                existing_data.kind = req_data.kind;
-                changed = true;
-            }
-
-            if existing_data.inactive != req_data.inactive {
-                existing_data.inactive = req_data.inactive;
-                changed = true;
-            }
-
-            if existing_data.start_time != req_data.start_time {
-                existing_data.start_time = req_data.start_time;
-                changed = true;
-            }
-
-            if existing_data.end_time != req_data.end_time {
-                existing_data.end_time = req_data.end_time;
-                changed = true;
-            }
-
-            if existing_data.audiences != req_data.audiences {
-                existing_data.audiences = req_data.audiences;
-                changed = true;
-            }
-
-            if existing_data.variations != req_data.variations {
-                existing_data.variations = req_data.variations;
-                changed = true;
-            }
-
-            if existing_data.frequency_constraint != req_data.frequency_constraint {
-                existing_data.frequency_constraint = req_data.frequency_constraint;
-                changed = true;
-            }
-
-            if existing_data.data != req_data.data {
-                existing_data.data = req_data.data;
-                changed = true;
-            }
-
-            // version change can be because of
-            //      - change in audience spec or size
-            //      - change in variations or size
-            // if audience spec changed -- user may not be anymore part of the eligible set.
-            // if audience size increased -- it is fine to keep user
-            // if audience size decreased -- we may need to re-evaluate user's eligibility
-            // if change in variations -- experiment is kept, but user may need to be assigned to different variant
-            // if variant size increased -- experiment is kept, variation is kept
-            // if variant size decreased -- experiment is kept, reassign variant
-            if changed {
-                // increment the version #
-                existing_data.version += 1;
-            }
-
-            self.write_experiment_data(app_id, project_id, &existing_data)?;
+            self.experiment_store.write_experiment_data(app_id, project_id, &existing_data)?;
 
             HttpResponse::str(route, "SUCCESS")
         };
 
         self.visit_experiment(app_id, project_id, experiment_id, guard, visitor)
+    }
+
+    fn update_experiment_data(req_data: Experiment, existing_data: &mut RwLockWriteGuard<RawRwLock, Experiment>) {
+        let mut changed = false;
+        if existing_data.name != req_data.name {
+            existing_data.name = req_data.name;
+            changed = true;
+        }
+
+        if existing_data.short_name != req_data.short_name {
+            existing_data.short_name = req_data.short_name;
+            changed = true;
+        }
+
+        if existing_data.kind != req_data.kind {
+            existing_data.kind = req_data.kind;
+            changed = true;
+        }
+
+        if existing_data.inactive != req_data.inactive {
+            existing_data.inactive = req_data.inactive;
+            changed = true;
+        }
+
+        if existing_data.start_time != req_data.start_time {
+            existing_data.start_time = req_data.start_time;
+            changed = true;
+        }
+
+        if existing_data.end_time != req_data.end_time {
+            existing_data.end_time = req_data.end_time;
+            changed = true;
+        }
+
+        if existing_data.audiences != req_data.audiences {
+            existing_data.audiences = req_data.audiences;
+            changed = true;
+        }
+
+        if existing_data.variations != req_data.variations {
+            existing_data.variations = req_data.variations;
+            changed = true;
+        }
+
+        if existing_data.frequency_constraint != req_data.frequency_constraint {
+            existing_data.frequency_constraint = req_data.frequency_constraint;
+            changed = true;
+        }
+
+        if existing_data.data != req_data.data {
+            existing_data.data = req_data.data;
+            changed = true;
+        }
+
+        // version change can be because of
+        //      - change in audience spec or size
+        //      - change in variations or size
+        // if audience spec changed -- user may not be anymore part of the eligible set.
+        // if audience size increased -- it is fine to keep user
+        // if audience size decreased -- we may need to re-evaluate user's eligibility
+        // if change in variations -- experiment is kept, but user may need to be assigned to different variant
+        // if variant size increased -- experiment is kept, variation is kept
+        // if variant size decreased -- experiment is kept, reassign variant
+        if changed {
+            // increment the version #
+            existing_data.version += 1;
+        }
+
+        existing_data.modification_time = req_data.modification_time;
     }
 
     fn validate_experiment_data(&self, project: &Project, data_to_validate: &Experiment, update_id: Option<&str>, guard: &Guard) -> ApiResult<()> {

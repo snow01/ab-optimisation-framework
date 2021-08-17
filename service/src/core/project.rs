@@ -5,8 +5,11 @@ use crossbeam_epoch as epoch;
 use crossbeam_epoch::Guard;
 use crossbeam_skiplist::SkipList;
 use hyper::Body;
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
 use nanoid::nanoid;
-use parking_lot::RwLock;
+use parking_lot::lock_api::RwLockWriteGuard;
+use parking_lot::{RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -40,6 +43,10 @@ pub struct Project {
     #[serde(with = "skiplist_serde")]
     #[serde(default = "default_audience_lists")]
     pub audience_lists: SkipList<String, RwLock<AudienceList>>,
+
+    #[serde(skip)]
+    #[serde(default)]
+    pub modification_time: i64,
 }
 
 fn default_experiments() -> SkipList<String, RwLock<Experiment>> {
@@ -68,14 +75,29 @@ fn default_tracking_method() -> TrackingMethod {
 }
 
 impl AbOptimisationService {
-    pub(crate) fn load_project(&self, file: &str, app_id: &str, project_id: &str, mut project: Project) -> anyhow::Result<()> {
-        info!("Loading project for app:{}, id:{}", app_id, project_id);
-
+    pub(crate) fn load_project(&self, file: &str, app_id: &str, project_id: &str, mut project: Project, modification_time: i64) -> anyhow::Result<()> {
         let guard = &epoch::pin();
-        project.id = project_id.to_string();
 
         self.visit_app(app_id, guard, |entry| {
-            entry.value().read().projects.insert(project_id.to_string(), RwLock::new(project), guard);
+            project.id = project_id.to_string();
+            project.modification_time = modification_time;
+
+            let projects = &entry.value().read().projects;
+            match projects.get(project_id, guard) {
+                None => {
+                    info!("Loading project for app:{}, id:{}", app_id, project_id);
+                    projects.insert(project_id.to_string(), RwLock::new(project), guard);
+                }
+                Some(entry) => {
+                    let project_lock = entry.value();
+                    let mut project_guard = project_lock.write();
+
+                    if modification_time == 0 || modification_time > project_guard.modification_time {
+                        info!("Updated project for app:{}, id:{}", app_id, project_id);
+                        AbOptimisationService::update_project_data(project, &mut project_guard);
+                    }
+                }
+            }
 
             Ok(())
         })
@@ -95,7 +117,7 @@ impl AbOptimisationService {
 
             let id = nanoid!();
             req_data.id = id.to_string();
-            self.write_project_data(app_id, &req_data)?;
+            self.experiment_store.write_project_data(app_id, &req_data)?;
 
             app_guard.projects.insert(id.to_string(), RwLock::new(req_data), guard);
 
@@ -122,24 +144,30 @@ impl AbOptimisationService {
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<Project>>| {
             let mut existing_data = entry.value().write();
 
-            if existing_data.short_name != req_data.short_name {
-                existing_data.short_name = req_data.short_name
-            }
+            AbOptimisationService::update_project_data(req_data, &mut existing_data);
 
-            if existing_data.name != req_data.name {
-                existing_data.name = req_data.name
-            }
-
-            if existing_data.tracking_method != req_data.tracking_method {
-                existing_data.tracking_method = req_data.tracking_method
-            }
-
-            self.write_project_data(app_id, &existing_data)?;
+            self.experiment_store.write_project_data(app_id, &existing_data)?;
 
             HttpResponse::str(route, "SUCCESS")
         };
 
         self.visit_project(app_id, project_id, guard, visitor)
+    }
+
+    fn update_project_data(req_data: Project, existing_data: &mut RwLockWriteGuard<RawRwLock, Project>) {
+        if existing_data.short_name != req_data.short_name {
+            existing_data.short_name = req_data.short_name
+        }
+
+        if existing_data.name != req_data.name {
+            existing_data.name = req_data.name
+        }
+
+        if existing_data.tracking_method != req_data.tracking_method {
+            existing_data.tracking_method = req_data.tracking_method
+        }
+
+        existing_data.modification_time = req_data.modification_time;
     }
 
     fn validate_project_data(&self, app: &App, data_to_validate: &Project, update_id: Option<&str>, guard: &Guard) -> ApiResult<()> {

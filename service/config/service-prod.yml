@@ -1,8 +1,9 @@
 http_workers: 6
 json_payload_limit: 262144
+secure_cookie: true
 store_kind: s3
 store_config:
   bucket: abof-data
   region: ap-south-1
-  path: "dev/data"
+  path: "prod/data"
   refresh_rate: 30

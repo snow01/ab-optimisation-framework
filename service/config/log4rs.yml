@@ -30,3 +30,9 @@ loggers:
     appenders:
       - access_log
     additive: false
+  reqwest:
+    level: off
+  hyper:
+    level: off
+  serde_xml_rs::de:
+    level: off

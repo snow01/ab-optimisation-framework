@@ -23,13 +23,13 @@ log4rs = { version = "1.0.0", features = ["background_rotation"] }
 hyper = { version = "0.14.11", features = ["full"] }
 tokio = { version = "1.10.0", features = ["full"] }
 itertools = "0.10.1"
-diesel = { version = "1.4.7", features = ["extras", "postgres", "uuidv07"] }
+#diesel = { version = "1.4.7", features = ["extras", "postgres", "uuidv07"] }
 enumset = "1.0.7"
 gethostname = "0.2.1"
 derive_more = "0.99.16"
 parking_lot = "0.11.1"
 http = "0.2.4"
-objekt-clonable = "0.2.2"
+#objekt-clonable = "0.2.2"
 libc = "0.2.99"
 
 bytes = "1.0.1"
@@ -55,10 +55,11 @@ maplit = "1.0.2"
 #pythonize = "0.14.0"
 nanoid = "0.4.0"
 regex = "1.5.4"
-fasthash = "0.4.0"
+#fasthash = "0.4.0"
 
 validator = { version = "0.14.0", features = ["derive"] }
-rust-s3 = "0.26.4"
+rust-s3 = {version = "0.26.4", features = ["fail-on-err"]}
+seahash = "4.1.0"
 
 [dependencies.chrono]
 version = "0.4.19"
