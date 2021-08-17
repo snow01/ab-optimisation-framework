@@ -7,7 +7,7 @@ pub use http_response::HttpResponse;
 pub use http_route::HttpRoute;
 pub use http_server::start_http_server;
 // pub(crate) use access_logger::ACCESS_LOGGER;
-pub use service::{Service, ServiceBuilder};
+pub use service::{Service, ServiceBuilder, ServiceDaemon, IN_ROTATION, SHUTDOWN};
 
 pub type ApiResult<R> = Result<R, ApiError>;
 pub type HttpResult = Result<Response<Body>, ApiError>;

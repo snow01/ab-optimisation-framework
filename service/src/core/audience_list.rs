@@ -5,8 +5,11 @@ use anyhow::{anyhow, Context};
 use crossbeam_epoch as epoch;
 use crossbeam_epoch::Guard;
 use hyper::Body;
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
 use nanoid::nanoid;
-use parking_lot::RwLock;
+use parking_lot::lock_api::RwLockWriteGuard;
+use parking_lot::{RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -23,6 +26,10 @@ pub struct AudienceList {
     pub name: String,
 
     pub list: HashSet<String>,
+
+    #[serde(skip)]
+    #[serde(default)]
+    pub modification_time: i64,
 }
 
 impl HasId for AudienceList {
@@ -32,6 +39,43 @@ impl HasId for AudienceList {
 }
 
 impl AbOptimisationService {
+    pub(crate) fn load_audience_list(
+        &self,
+        file: &str,
+        app_id: &str,
+        project_id: &str,
+        list_id: &str,
+        mut audience_list: AudienceList,
+        modification_time: i64,
+    ) -> anyhow::Result<()> {
+        let guard = &epoch::pin();
+
+        self.visit_project(app_id, project_id, guard, |entry| {
+            audience_list.id = list_id.to_string();
+            audience_list.modification_time = modification_time;
+
+            let audience_lists = &entry.value().read().audience_lists;
+
+            match audience_lists.get(list_id, guard) {
+                None => {
+                    info!("Loading audience_list for app:{}, project:{}, list_id:{}", app_id, project_id, list_id);
+                    audience_lists.insert(list_id.to_string(), RwLock::new(audience_list), guard);
+                }
+                Some(entry) => {
+                    let mut audience_list_guard = entry.value().write();
+
+                    if modification_time == 0 || modification_time > audience_list_guard.modification_time {
+                        info!("Updated audience_list for app:{}, project:{}, list_id:{}", app_id, project_id, list_id);
+                        AbOptimisationService::update_audience_list_data(audience_list, &mut audience_list_guard);
+                    }
+                }
+            }
+
+            Ok(())
+        })
+        .with_context(|| format!("Error in loading audience list from file: {}", file))
+    }
+
     pub async fn add_audience_list(&self, route: &HttpRoute<'_>, app_id: &str, project_id: &str, body: Body) -> HttpResult {
         let mut req_data = HttpRequest::value::<AudienceList>(route, body).await?;
 
@@ -44,7 +88,7 @@ impl AbOptimisationService {
 
             let id = nanoid!();
             req_data.id = id.to_string();
-            self.write_audience_list_data(app_id, project_id, &req_data)?;
+            self.experiment_store.write_audience_list_data(app_id, project_id, &req_data)?;
 
             project.audience_lists.insert(id.to_string(), RwLock::new(req_data), guard);
 
@@ -70,18 +114,24 @@ impl AbOptimisationService {
         let visitor = |entry: crossbeam_skiplist::base::Entry<String, RwLock<AudienceList>>| {
             let mut existing_data = entry.value().write();
 
-            if existing_data.name != req_data.name {
-                existing_data.name = req_data.name
-            }
+            AbOptimisationService::update_audience_list_data(req_data, &mut existing_data);
 
-            existing_data.list = req_data.list;
-
-            self.write_audience_list_data(app_id, project_id, &existing_data)?;
+            self.experiment_store.write_audience_list_data(app_id, project_id, &existing_data)?;
 
             HttpResponse::str(route, "SUCCESS")
         };
 
         self.visit_audience_list(app_id, project_id, list_id, guard, visitor)
+    }
+
+    fn update_audience_list_data(req_data: AudienceList, existing_data: &mut RwLockWriteGuard<RawRwLock, AudienceList>) {
+        if existing_data.name != req_data.name {
+            existing_data.name = req_data.name
+        }
+
+        existing_data.list = req_data.list;
+
+        existing_data.modification_time = req_data.modification_time;
     }
 
     fn validate_audience_list_data(&self, project: &Project, data_to_validate: &AudienceList, update_id: Option<&str>, guard: &Guard) -> ApiResult<()> {

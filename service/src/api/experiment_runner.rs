@@ -376,7 +376,7 @@ impl AbOptimisationService {
         guard: &Guard,
     ) -> anyhow::Result<(bool, bool, bool)> {
         // TODO: calculate these seed once
-        let experiment_seed = fasthash::murmur3::hash32(&format!("{}/{}", proj.id, experiment.id));
+        let experiment_seed = seahash::hash(format!("{}/{}", proj.id, experiment.id).as_bytes());
 
         let mut targeting_eligible: bool = false;
         let mut picked: bool = false;
@@ -454,10 +454,13 @@ impl AbOptimisationService {
                     }
                     core::SizeSpec::Percent { value, ../*, sampler*/ } => {
                         // TODO: calculate these seed once
-                        let audience_seed = fasthash::murmur3::hash32(name);
-                        let user_hash_bucket = fasthash::murmur3::hash32_with_seed(
-                            &req.user_id,
-                            experiment_seed + audience_seed,
+                        let audience_seed = seahash::hash(name.as_bytes());
+                        let user_hash_bucket = seahash::hash_seeded(
+                            req.user_id.as_bytes(),
+                            experiment_seed,
+                            audience_seed,
+                            0,
+                            0
                         ) % 10000;
 
                         let user_hash_bucket = user_hash_bucket as i64;
@@ -547,12 +550,13 @@ impl AbOptimisationService {
                             Some(tracking_data) => tracking_data,
                         };
 
-                        let cookie = cookie::Cookie::build(tracking_cookie_name, cookie_value)
-                            .path("/")
-                            .permanent()
-                            // .secure(true) // TODO: depends on installation setting
-                            .http_only(true)
-                            .finish();
+                        let mut cookie_builder = cookie::Cookie::build(tracking_cookie_name, cookie_value).path("/").permanent().http_only(true);
+
+                        if crate::settings::secure_cookie() {
+                            cookie_builder = cookie_builder.secure(true);
+                        }
+
+                        let cookie = cookie_builder.finish();
 
                         response.headers_mut().append(
                             SET_COOKIE,

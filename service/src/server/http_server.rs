@@ -11,7 +11,7 @@ use hyper::Body;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use crate::server::{HttpResult, Service, ServiceBuilder};
+use crate::server::{HttpResult, Service, ServiceBuilder, ServiceDaemon, IN_ROTATION, SHUTDOWN};
 
 use super::access_logger::ACCESS_LOGGER;
 use super::health_check::{get_in_rotation_status, oor_handler};
@@ -29,6 +29,9 @@ async fn shutdown_signal() {
     debug!("Installing shutdown signal");
 
     tokio::signal::ctrl_c().await.expect("failed to install CTRL+C signal handler");
+
+    SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+    IN_ROTATION.store(false, std::sync::atomic::Ordering::Relaxed);
 
     warn!("Received shutdown signal");
 }
@@ -88,10 +91,11 @@ where
     response
 }
 
-pub async fn start_http_server<App, AppBuilder>(addr: &str, app_builder: AppBuilder) -> anyhow::Result<()>
+pub async fn start_http_server<App, AppDaemon, AppBuilder>(addr: &str, app_builder: AppBuilder) -> anyhow::Result<()>
 where
     App: 'static + Service,
-    AppBuilder: 'static + ServiceBuilder<App>,
+    AppDaemon: 'static + ServiceDaemon<App>,
+    AppBuilder: 'static + ServiceBuilder<App, AppDaemon>,
 {
     info!("Starting server at addr: {}", addr);
 
@@ -99,9 +103,16 @@ where
         .parse::<SocketAddr>()
         .with_context(|| format!("Parsing node addr '{}' as SocketAddr", addr))?;
 
-    let app = app_builder.build().with_context(|| "Error in building app")?;
-
+    let (app, app_daemon) = app_builder.build().with_context(|| "Error in building app")?;
     let app = Arc::new(app);
+
+    if let Some(app_daemon) = app_daemon {
+        // TODO: capture join handle and use in shutdown signal
+        let cloned_app = app.clone();
+        tokio::task::spawn(async move {
+            app_daemon.start(cloned_app).await;
+        });
+    }
 
     let make_svc = make_service_fn(move |transport: &AddrStream| {
         // TODO: log new connection
