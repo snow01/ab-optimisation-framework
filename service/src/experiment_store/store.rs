@@ -5,6 +5,8 @@ use std::path::Path;
 use anyhow::Context;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
+use s3::creds::Credentials;
+use s3::Bucket;
 use serde::Serialize;
 use walkdir::WalkDir;
 
@@ -106,23 +108,21 @@ impl LocalStore {
 }
 
 pub struct S3Store {
-    bucket: s3::bucket::Bucket,
+    config: settings::S3StoreConfig,
     path: String,
 }
 
 impl S3Store {
-    pub fn new(s3_store_config: settings::S3StoreConfig) -> anyhow::Result<S3Store> {
-        use s3::bucket::Bucket;
-        use s3::creds::Credentials;
+    pub fn new(config: settings::S3StoreConfig) -> anyhow::Result<S3Store> {
+        let path = config.path.to_string();
 
-        let region = s3_store_config.region.parse()?;
+        Ok(S3Store { config, path })
+    }
+
+    fn connect_bucket(&self) -> anyhow::Result<Bucket> {
+        let region = self.config.region.parse()?;
         let credentials = Credentials::default()?;
-        let bucket = Bucket::new(&s3_store_config.bucket, region, credentials)?;
-
-        Ok(S3Store {
-            bucket,
-            path: s3_store_config.path,
-        })
+        Bucket::new(&self.config.bucket, region, credentials).with_context(|| format!("Error in connecting to bucket for config: {:?}", self.config))
     }
 
     fn write_data<T>(&self, data: &T, path: &str) -> anyhow::Result<()>
@@ -130,7 +130,7 @@ impl S3Store {
         T: Serialize,
     {
         let buffer = serde_json::to_vec(data).with_context(|| format!("Error in writing data to buffer: {}", path))?;
-        self.bucket
+        self.connect_bucket()?
             .put_object_blocking(path, &buffer)
             .with_context(|| format!("Error in writing data to S3 file: {}", path))?;
 
@@ -148,7 +148,7 @@ impl S3Store {
 
         while !consumed {
             let (list_results, _) = self
-                .bucket
+                .connect_bucket()?
                 .list_page_blocking(path.to_string(), None, continuation_token.clone(), None, Some(100))
                 .with_context(|| format!("Error in listing objects in path: {}", path))?;
 
@@ -177,7 +177,7 @@ impl S3Store {
         T: serde::de::DeserializeOwned,
     {
         let (buffer, _) = self
-            .bucket
+            .connect_bucket()?
             .get_object_blocking(path.to_string_lossy())
             .with_context(|| format!("Error in reading data from path: {}", path.to_string_lossy()))?;
 
