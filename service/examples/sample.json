@@ -23,10 +23,11 @@
       "flow_config": [
         "s_i",
         "l_s",
-        "c_s",
+        "s_i",
         "p_b_i",
         "p_p_i",
         "i_s",
+        "c_s",
         "f"
       ]
     }

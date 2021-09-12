@@ -1,5 +1,5 @@
 ### run for new user
-POST http://{{host}}/api/run
+POST https://{{host}}/api/run
 Content-Type: application/json
 
 {
@@ -7,10 +7,9 @@ Content-Type: application/json
   "project_id": "V1NauWW7Qs73MR5J6X0ZF",
   "user_id": "1234",
   "context": {
-    "app_version": "4.9.1.2107",
+    "app_version": "4.9.16",
     "new_user": true
-  },
-  "tracking_data": "rlnch|5|T||3539778|1|5|0|1~crnt|7|T||3539778|1|7|0|1"
+  }
 }
 
 ### run for relaunch
