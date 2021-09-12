@@ -3,7 +3,7 @@
 	 * @type {import('@sveltejs/kit').Load}
 	 */
 	export async function load({ page, fetch, session, context }) {
-		const url = `/blog/${page.params.slug}.json`;
+		const url = `/app-list.data`;
 		const res = await fetch(url);
 
 		if (res.ok) {
@@ -20,3 +20,4 @@
 		};
 	}
 </script>
+

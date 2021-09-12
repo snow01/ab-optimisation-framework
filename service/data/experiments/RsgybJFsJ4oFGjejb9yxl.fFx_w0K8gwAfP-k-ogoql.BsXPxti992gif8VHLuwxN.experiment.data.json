@@ -1,1 +1,49 @@
-{"id":"BsXPxti992gif8VHLuwxN","name":"streamurl","short_name":"strmU","version":14,"kind":"Experiment","inactive":false,"start_time":null,"end_time":null,"audiences":[{"name":"gtwy_crnt_users","script_src":"ctx.get('app_version', '0.0.0') >= '4.4.9' and ctx.get('app_version', '0.0.0') < '4.9.0'","list_id":null,"size_kind":"Percent","value":95}],"frequency_constraint":null,"variations":[{"name":"AkamaiWithoutQuic","short_name":"awoq","size":5,"data":{"host_url":"https://qa-stream.coolfie.io"}},{"name":"GoogleWithoutQuic","short_name":"gwoq","size":5,"data":{"host_url":"https://qa-stream-nq.coolfie.io"}},{"name":"GoogleWithQuic","short_name":"gwq","size":90,"data":{"host_url":"https://qa-stream-g.coolfie.io"}}],"data":{"cronet":true}}
+{
+  "id": "BsXPxti992gif8VHLuwxN",
+  "name": "streamurl",
+  "short_name": "strmU",
+  "version": 14,
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "name": "gtwy_crnt_users",
+      "script_src": "ctx.get('app_version', '0.0.0') >= '4.4.9' and ctx.get('app_version', '0.0.0') < '4.9.0'",
+      "list_id": null,
+      "size_kind": "Percent",
+      "value": 95
+    }
+  ],
+  "frequency_constraint": null,
+  "variations": [
+    {
+      "name": "AkamaiWithoutQuic",
+      "short_name": "awoq",
+      "size": 5,
+      "data": {
+        "host_url": "https://qa-stream.coolfie.io"
+      }
+    },
+    {
+      "name": "GoogleWithoutQuic",
+      "short_name": "gwoq",
+      "size": 5,
+      "data": {
+        "host_url": "https://qa-stream-nq.coolfie.io"
+      }
+    },
+    {
+      "name": "GoogleWithQuic",
+      "short_name": "gwq",
+      "size": 90,
+      "data": {
+        "host_url": "https://qa-stream-g.coolfie.io"
+      }
+    }
+  ],
+  "data": {
+    "cronet": true
+  }
+}
