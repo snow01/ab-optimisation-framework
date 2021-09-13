@@ -2,9 +2,16 @@
 	"name": "~todo~",
 	"version": "0.0.1",
 	"scripts": {
-		"dev": "svelte-kit dev",
-		"build": "svelte-kit build",
+		"dev:only": "svelte-kit dev",
+		"build:only": "svelte-kit build",
 		"preview": "svelte-kit preview",
+
+		"scss:watch": "sass -q -w --embed-source-map -I . src/assets/sass/argon.scss static/argon.css",
+		"scss:build": "sass -q --embed-source-map -I . src/assets/sass/argon.scss static/argon.css",
+
+		"dev": "concurrently \"npm run dev:only\" \"npm run scss:watch\"",
+		"build": "concurrently \"npm run build:only\" \"npm run scss:build\"",
+
 		"check": "svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --ignore-path .gitignore  --check --plugin-search-dir=. . && eslint --ignore-path .gitignore .",
@@ -16,6 +23,8 @@
 		"@typescript-eslint/eslint-plugin": "^4.19.0",
 		"@typescript-eslint/parser": "^4.19.0",
 		"bootstrap": "^4.6.0",
+		"concurrently": "^6.2.1",
+		"cross-env": "^7.0.3",
 		"eslint": "^7.22.0",
 		"eslint-config-prettier": "^8.1.0",
 		"eslint-plugin-svelte3": "^3.2.0",
