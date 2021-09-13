@@ -1,5 +1,5 @@
 <script>
-  import "../assets/sass/argon.scss";
+  import "../app.scss";
 </script>
 
 <slot></slot>
