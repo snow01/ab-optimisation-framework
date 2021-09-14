@@ -1,0 +1,6 @@
+.profile-header {
+    background-image: url(/img/theme/profile-cover.jpg);
+    background-size: cover;
+    background-position: top;
+    min-height: 500px
+}
