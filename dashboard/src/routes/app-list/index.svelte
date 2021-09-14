@@ -7,9 +7,12 @@
 		const res = await fetch(url);
 
 		if (res.ok) {
+			let list = await res.json();
+			console.log(list);
+
 			return {
 				props: {
-					article: await res.json()
+					list
 				}
 			};
 		}
@@ -21,3 +24,17 @@
 	}
 </script>
 
+<script>
+	export let list;
+
+	let type = 'app-list';
+	let name = 'apps';
+</script>
+
+<div class='container-fluid pt-3'>
+	{#each list as json, index}
+		<div class='row py-2'>
+			{JSON.stringify(json)}
+		</div>
+	{/each}
+</div>

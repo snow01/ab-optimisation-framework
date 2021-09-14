@@ -1,4 +1,3 @@
-let i;
 <script>
 	//   export let title = "Creative Tim"; //'Sidebar title'
 	//   export let shortTile = "CT"; //'Sidebar short title'

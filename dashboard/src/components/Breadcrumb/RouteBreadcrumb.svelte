@@ -1,7 +1,15 @@
 <script>
   import BreadCrumb from "./Breadcrumb.svelte";
   import BreadcCrumbItem from "./BreadcrumbItem.svelte";
-  let path = window.location.pathname.split("/");
+
+  let path = ""; // window.location.pathname.split("/");
+
+  import { onMount } from 'svelte';
+
+  onMount(function() {
+    path = window.location.pathname.split("/");
+  });
+
   export let name = "";
   let pathName = name;
 </script>
