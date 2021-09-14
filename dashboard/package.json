@@ -5,13 +5,10 @@
 		"dev:only": "svelte-kit dev",
 		"build:only": "svelte-kit build",
 		"preview": "svelte-kit preview",
-
 		"scss:watch": "sass -q -w --embed-source-map -I . src/assets/sass/argon.scss static/argon.css",
 		"scss:build": "sass -q --embed-source-map -I . src/assets/sass/argon.scss static/argon.css",
-
 		"dev": "concurrently \"npm run dev:only\" \"npm run scss:watch\"",
 		"build": "concurrently \"npm run build:only\" \"npm run scss:build\"",
-
 		"check": "svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --ignore-path .gitignore  --check --plugin-search-dir=. . && eslint --ignore-path .gitignore .",
@@ -35,7 +32,8 @@
 		"svelte-check": "^2.0.0",
 		"svelte-preprocess": "^4.9.4",
 		"tslib": "^2.0.0",
-		"typescript": "^4.0.0"
+		"typescript": "^4.0.0",
+		"uuid": "^8.3.2"
 	},
 	"type": "module",
 	"description": "Everything you need to build a Svelte project, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/master/packages/create-svelte);",

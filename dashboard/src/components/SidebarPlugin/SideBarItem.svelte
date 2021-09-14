@@ -8,7 +8,7 @@
     single: false
   }; //'Sidebar link. Can contain name, path, icon and other attributes. See examples for more info'
   import { fly } from "svelte/transition";
-  import uuidv1 from "uuid/v1";
+  import {v1 as uuidv1} from "uuid";
   let parentId = uuidv1();
   let childrenId = uuidv1();
   let sublinkId = uuidv1();
@@ -30,27 +30,27 @@
   }
   onMount(async () => {
     if (collapsed === true) {
-      var parent = document.getElementById(parentId);
-      var children = document.getElementById(childrenId);
+      const parent = document.getElementById(parentId);
+      const children = document.getElementById(childrenId);
       parent.style.height = children.clientHeight + "px";
     }
   });
 
   function collapseSubMenu() {
     collapsed = !collapsed;
-    var parent = document.getElementById(parentId);
+    const parent = document.getElementById(parentId);
     if (collapsed === true) {
-      var children = document.getElementById(childrenId);
+      const children = document.getElementById(childrenId);
       parent.style.height = children.scrollHeight + "px";
       if (
         !parent.parentElement.parentElement.classList.contains("navbar-nav")
       ) {
         let list = document.querySelectorAll("li.sidebar-item");
-        for (var i = 0; i < list.length; i++) {
+        for (let i = 0; i < list.length; i++) {
           let childrens = list[i].getElementsByClassName("sidebarcollapse");
           let height = 0;
           let newheight = 0;
-          for (var j = 0; j < childrens.length; j++) {
+          for (let j = 0; j < childrens.length; j++) {
             height = height + childrens[j].scrollHeight;
             let str = childrens[j].style.height;
             str.replace("px", "");
@@ -71,7 +71,7 @@
         let list = parent.parentElement.parentElement.querySelectorAll(
           "li.sidebar-item"
         );
-        for (var i = 0; i < list.length; i++) {
+        for (let i = 0; i < list.length; i++) {
           let childrens = list[i].getElementsByClassName("sidebarcollapse");
           let height = parentHeight;
           let newheight = childrens[0].style.height;

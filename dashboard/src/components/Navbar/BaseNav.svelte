@@ -28,9 +28,12 @@
     } else return "";
   }
   let color = `bg-${type}`;
-  if ($$props.$$slots.default) {
-    hasMenu === true;
-  }
+
+  // TODO: SHAILENDRA FIX THIS
+  // if ($$props.$$slots.default) {
+  //   hasMenu === true;
+  // }
+
   function toggleMenu() {
     show = !show;
   }
