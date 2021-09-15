@@ -219,6 +219,7 @@
 							<RouteBreadCrumb {name} />
 						</nav>
 					</div>
+					<slot name='header'></slot>
 				</div>
 			</BaseHeader>
 			<!-- your content here -->

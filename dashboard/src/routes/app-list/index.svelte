@@ -31,6 +31,9 @@
 	let name = 'apps';
 </script>
 
+<span slot='header'>
+
+</span>
 <div class='container-fluid pt-3'>
 	{#each list as json, index}
 		<div class='row py-2'>
