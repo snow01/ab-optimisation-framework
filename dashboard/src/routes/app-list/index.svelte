@@ -25,15 +25,15 @@
 </script>
 
 <script>
+	import PageHeader from '../PageHeader.svelte';
+
 	export let list;
 
 	let type = 'app-list';
 	let name = 'apps';
 </script>
 
-<span slot='header'>
-
-</span>
+<PageHeader {name}></PageHeader>
 <div class='container-fluid pt-3'>
 	{#each list as json, index}
 		<div class='row py-2'>

@@ -7,10 +7,10 @@
 	// Components
 	import SideBar from '$components/SidebarPlugin/SideBar.svelte';
 	import SideBarItem from '$components/SidebarPlugin/SideBarItem.svelte';
-	import RouteBreadCrumb from '$components/Breadcrumb/RouteBreadcrumb.svelte';
-	import BaseHeader from '$components/BaseHeader.svelte';
-
-	export let name = '';
+	// import RouteBreadCrumb from '$components/Breadcrumb/RouteBreadcrumb.svelte';
+	// import BaseHeader from '$components/BaseHeader.svelte';
+	//
+	// export let name = '';
 	export let type = 'default';
 
 	import { onMount } from 'svelte';
@@ -211,17 +211,7 @@
 	<div class='main-content'>
 		<DashboardNavbar {type} showSidebar={toggle} on:click={changeToggle} />
 		<div transition:fade={{ duration: 250 }}>
-			<BaseHeader className='pb-3'>
-				<div class='row align-items-center py-4'>
-					<div class='col-lg-6 col-7'>
-						<h6 class='h2 text-white d-inline-block mb-0'>Applications</h6>
-						<nav aria-label='breadcrumb' class='d-none d-md-inline-block ml-md-4'>
-							<RouteBreadCrumb {name} />
-						</nav>
-					</div>
-					<slot name='header'></slot>
-				</div>
-			</BaseHeader>
+
 			<!-- your content here -->
 			<slot></slot>
 		</div>
