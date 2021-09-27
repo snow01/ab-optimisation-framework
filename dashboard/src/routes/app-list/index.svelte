@@ -25,19 +25,25 @@
 </script>
 
 <script>
+	import Page from '../Page.svelte';
+
 	export let list;
 
 	let type = 'app-list';
 	let name = 'apps';
 </script>
 
-<span slot='header'>
+<Page>
+	<span slot='header'>
 
-</span>
-<div class='container-fluid pt-3'>
-	{#each list as json, index}
-		<div class='row py-2'>
-			{JSON.stringify(json)}
+	</span>
+	<span slot='content'>
+		<div class='container-fluid pt-3'>
+			{#each list as json, index}
+				<div class='row py-2'>
+					{JSON.stringify(json)}
+				</div>
+			{/each}
 		</div>
-	{/each}
-</div>
+	</span>
+</Page>

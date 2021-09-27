@@ -3,7 +3,6 @@
 	import ContentFooter from './ContentFooter.svelte';
 	import DashboardNavbar from './DashboardNavbar.svelte';
 
-
 	// Components
 	import SideBar from '$components/SidebarPlugin/SideBar.svelte';
 	import SideBarItem from '$components/SidebarPlugin/SideBarItem.svelte';
@@ -223,7 +222,7 @@
 				</div>
 			</BaseHeader>
 			<!-- your content here -->
-			<slot></slot>
+			<slot name='content'></slot>
 		</div>
 		<ContentFooter />
 	</div>
