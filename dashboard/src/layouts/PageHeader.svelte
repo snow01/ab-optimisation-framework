@@ -5,7 +5,7 @@
 	export let name = '';
 </script>
 
-<BaseHeader className='pb-3'>
+<BaseHeader className='pb-6'>
 	<div class='row align-items-center py-4'>
 		<div class='col-lg-6 col-7'>
 			<h6 class='h2 text-white d-inline-block mb-0'>Applications</h6>
@@ -13,6 +13,6 @@
 				<RouteBreadCrumb {name} />
 			</nav>
 		</div>
-		<slot name='header'></slot>
+		<slot></slot>
 	</div>
 </BaseHeader>

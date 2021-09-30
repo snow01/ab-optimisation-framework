@@ -227,7 +227,7 @@ Content-Type: application/json
       "script_src": "ctx.get('new_user', False) and sem_version(ctx.get(app_version, '0.0.0')) >= '4.9.0'",
       "list_id": null,
       "size_kind": "Percent",
-      "value": 50
+      "value": 80
     },
     {
       "name": "WhitelistedUsers",
@@ -257,7 +257,7 @@ Content-Type: application/json
   "name": "relaunch",
   "short_name": "rlnch",
   "kind": "Experiment",
-  "inactive": false,
+  "inactive": true,
   "start_time": null,
   "end_time": null,
   "audiences": [
@@ -266,7 +266,7 @@ Content-Type: application/json
       "script_src": "not ctx.get('new_user', False) and sem_version(ctx.get(app_version, '0.0.0')) >= '4.9.0'",
       "list_id": null,
       "size_kind": "Percent",
-      "value": 50
+      "value": 10
     },
     {
       "name": "WhitelistedUsers",

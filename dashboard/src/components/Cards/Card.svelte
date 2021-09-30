@@ -16,8 +16,6 @@
   export let background = "";
 
   export let noBody = false; //Whether card should have wrapper body class
-
-  let slots = $$props.$$slots;
 </script>
 
 <style>
@@ -43,7 +41,7 @@
       <img {alt} src={imgSrc} class="card-img-top" />
     </slot>
   {/if}
-  {#if slots.header}
+  {#if $$slots.header}
     <div class="card-header  {headerClasses}">
       <slot name="header" />
     </div>
@@ -56,7 +54,7 @@
   {#if noBody}
     <slot />
   {/if}
-  {#if slots.footer}
+  {#if $$slots.footer}
     <div class="card-footer {footerClasses}">
       <slot name="footer" />
     </div>

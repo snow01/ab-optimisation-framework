@@ -1,15 +1,40 @@
+<script context='module'>
+	/**
+	 * @type {import('@sveltejs/kit').Load}
+	 */
+	export async function load({ page, fetch, session, context }) {
+		const url = `/apps.data`;
+		const res = await fetch(url);
+
+		if (res.ok) {
+			let list = await res.json();
+			console.log(list);
+
+			return {
+				props: {
+					list
+				}
+			};
+		}
+
+		return {
+			status: res.status,
+			error: new Error(`Could not load ${url}`)
+		};
+	}
+</script>
+
 <script>
 	import Page from '$layouts/Page.svelte';
 	import Table from '$layouts/table/Table.svelte';
 	import ButtonWithIcon from '$layouts/ButtonWithIcon.svelte';
-	import TableTitle from '$layouts/table/Title.svelte';
 	import TableHeader from '$layouts/table/TableHeader.svelte';
 	import HeaderColumn from '$layouts/table/HeaderColumn.svelte';
 	import Body from '$layouts/table/Body.svelte';
 	import Row from '$layouts/table/Row.svelte';
 	import Column from '$layouts/table/Column.svelte';
 
-	export let list = [];
+	export let list;
 
 	let type = 'apps';
 	let name = 'apps';
