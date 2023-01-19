@@ -209,3 +209,34 @@ Content-Type: application/json
   }
 }
 
+### update strmu experiment
+POST https://abof.myjosh.in/api/experiments/0ufBh9RcSAVnWbPZwlAmH/nVqx1OdSCm3PF5k4KfmuA/SBJGNHefdPmocx42P8Nzz
+Content-Type: application/json
+
+{
+  "name": "streamurl",
+  "short_name": "strmU",
+  "kind": "Experiment",
+  "inactive": true,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "kind": "Audience",
+      "name": "gcp_cdn_users",
+      "audience_kind": "Script",
+      "script_src": "ctx.get('app_version', '0.0.0') >= '4.9.0'",
+      "size_kind": "Percent",
+      "value": 1
+    }
+  ],
+  "frequency_constraint": null,
+  "data": {
+    "cronet_enabled_api_paths": [
+      "feed.myjosh.in"
+    ],
+    "host_url": "https://stream-g.myjosh.in",
+    "use_cronet_for_apis": true
+  }
+}
+
