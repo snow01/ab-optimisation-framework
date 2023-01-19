@@ -1,19 +1,18 @@
 <script>
+	import '$assets/global.css';
 	import { fade } from 'svelte/transition';
-	import ContentFooter from './ContentFooter.svelte';
 	import DashboardNavbar from './DashboardNavbar.svelte';
-
 
 	// Components
 	import SideBar from '$components/SidebarPlugin/SideBar.svelte';
 	import SideBarItem from '$components/SidebarPlugin/SideBarItem.svelte';
-	// import RouteBreadCrumb from '$components/Breadcrumb/RouteBreadcrumb.svelte';
-	// import BaseHeader from '$components/BaseHeader.svelte';
-	//
-	// export let name = '';
+
+	export let name = '';
 	export let type = 'default';
 
 	import { onMount } from 'svelte';
+	import PageHeader from './PageHeader.svelte';
+	import ContentFooter from '$layouts/ContentFooter.svelte';
 
 	onMount(function() {
 		let topmenu = document.getElementsByTagName('nav').item(0);
@@ -211,10 +210,11 @@
 	<div class='main-content'>
 		<DashboardNavbar {type} showSidebar={toggle} on:click={changeToggle} />
 		<div transition:fade={{ duration: 250 }}>
-
+			<PageHeader {name}>
+				<slot name='header'></slot>
+			</PageHeader>
 			<!-- your content here -->
-			<slot></slot>
+			<slot name='content'></slot>
 		</div>
-		<ContentFooter />
 	</div>
 </div>

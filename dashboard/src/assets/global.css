@@ -1,0 +1,36 @@
+table.dataTable thead .sorting {
+    background-image: none !important;
+}
+
+table.dataTable thead .sorting_asc {
+    background-image: none !important;
+}
+
+table.dataTable thead .sorting_desc {
+    background-image: none !important;
+}
+
+table.dataTable thead .sorting_asc_disabled {
+    background-image: none !important;
+}
+
+table.dataTable thead .sorting_desc_disabled {
+    background-image: none !important;
+}
+
+table.dataTable tbody tr {
+    /* background-color: #ffffff */
+}
+
+table.dataTable tbody tr.selected {
+    background-color: #B0BED9
+}
+
+table.dataTable tbody th,
+table.dataTable tbody td {
+    /*padding: 0;*/
+}
+
+.table-responsive {
+    margin-bottom: 0;
+}

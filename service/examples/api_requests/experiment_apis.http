@@ -209,7 +209,129 @@ Content-Type: application/json
   }
 }
 
-### update strmu experiment
+
+### update onboarding experiment
+POST https://abof.myjosh.in/api/experiments/0ufBh9RcSAVnWbPZwlAmH/nVqx1OdSCm3PF5k4KfmuA/1hE-sslo58BMh_5RpRSUo
+Content-Type: application/json
+
+{
+  "name": "onboarding",
+  "short_name": "onb",
+  "kind": "Experiment",
+  "inactive": false,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "name": "new_users",
+      "script_src": "ctx.get('new_user', False) and sem_version(ctx.get(app_version, '0.0.0')) >= '4.9.0'",
+      "list_id": null,
+      "size_kind": "Percent",
+      "value": 80
+    },
+    {
+      "name": "WhitelistedUsers",
+      "script_src": null,
+      "list_id": "ONFPFTy6QUqSLN3bSQoeq",
+      "size_kind": "Absolute",
+      "value": 100
+    }
+  ],
+  "frequency_constraint": "experiment.get(total_invocation_count, 0) % 2 == 0",
+  "variations": null,
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "f"
+    ]
+  }
+}
+
+### update relaunch experiment
+POST https://abof.myjosh.in/api/experiments/0ufBh9RcSAVnWbPZwlAmH/nVqx1OdSCm3PF5k4KfmuA/97VM-3vM4egEeNTATPvjN
+Content-Type: application/json
+
+{
+  "name": "relaunch",
+  "short_name": "rlnch",
+  "kind": "Experiment",
+  "inactive": true,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "name": "new_users",
+      "script_src": "not ctx.get('new_user', False) and sem_version(ctx.get(app_version, '0.0.0')) >= '4.9.0'",
+      "list_id": null,
+      "size_kind": "Percent",
+      "value": 10
+    },
+    {
+      "name": "WhitelistedUsers",
+      "script_src": null,
+      "list_id": "ONFPFTy6QUqSLN3bSQoeq",
+      "size_kind": "Absolute",
+      "value": 100
+    }
+  ],
+  "frequency_constraint": "experiment.get(total_invocation_count, 0) < 1",
+  "variations": null,
+  "data": {
+    "flow_config": [
+      "s_i",
+      "l_s",
+      "c_s",
+      "f"
+    ]
+  }
+}
+
+
+### update dobf experiment
+POST https://abof.myjosh.in/api/experiments/0ufBh9RcSAVnWbPZwlAmH/nVqx1OdSCm3PF5k4KfmuA/6CS1fNEZafwdEqwcJNwaR
+Content-Type: application/json
+
+{
+  "name": "delayed onboarding",
+  "short_name": "dobf",
+  "kind": "Experiment",
+  "inactive": true,
+  "start_time": null,
+  "end_time": null,
+  "audiences": [
+    {
+      "name": "new_users",
+      "script_src": "sem_version(ctx.get('app_version', '0.0.0')) > '4.9.21'",
+      "list_id": null,
+      "size_kind": "Percent",
+      "value": 100
+    },
+    {
+      "name": "WhitelistedUsers",
+      "script_src": "sem_version(ctx.get('app_version', '0.0.0')) > '4.9.21'",
+      "list_id": "ONFPFTy6QUqSLN3bSQoeq",
+      "size_kind": "Absolute",
+      "value": 100
+    }
+  ],
+  "frequency_constraint": null,
+  "variations": null,
+  "data": {
+    "card_config": {
+      "a_n_c": 10,
+      "d_a_i": 1
+    },
+    "flow_config": [
+      "s_i",
+      "c_s"
+    ]
+  }
+}
+
+
+### update stream url experiment
 POST https://abof.myjosh.in/api/experiments/0ufBh9RcSAVnWbPZwlAmH/nVqx1OdSCm3PF5k4KfmuA/SBJGNHefdPmocx42P8Nzz
 Content-Type: application/json
 
@@ -217,26 +339,47 @@ Content-Type: application/json
   "name": "streamurl",
   "short_name": "strmU",
   "kind": "Experiment",
-  "inactive": true,
+  "inactive": false,
   "start_time": null,
   "end_time": null,
   "audiences": [
     {
-      "kind": "Audience",
-      "name": "gcp_cdn_users",
-      "audience_kind": "Script",
-      "script_src": "ctx.get('app_version', '0.0.0') >= '4.9.0'",
+      "name": "crnt_users",
+      "script_src": "sem_version(ctx.get('app_version', '0.0.0')) >= '4.9.0'",
+      "list_id": null,
       "size_kind": "Percent",
-      "value": 1
+      "value": 20
     }
   ],
   "frequency_constraint": null,
+  "variations": [
+    {
+      "name": "AkamaiWithoutQuic",
+      "short_name": "awoq",
+      "size": 25,
+      "data": {
+        "host_url": "https://stream.myjosh.in"
+      }
+    },
+    {
+      "name": "GoogleWithoutQuic",
+      "short_name": "gwoq",
+      "size": 25,
+      "data": {
+        "host_url": "https://stream-nq.myjosh.in"
+      }
+    },
+    {
+      "name": "GoogleWithQuic",
+      "short_name": "gwq",
+      "size": 50,
+      "data": {
+        "host_url": "https://stream-g.myjosh.in"
+      }
+    }
+  ],
   "data": {
-    "cronet_enabled_api_paths": [
-      "feed.myjosh.in"
-    ],
-    "host_url": "https://stream-g.myjosh.in",
-    "use_cronet_for_apis": true
+    "cronet": false
   }
 }
 
